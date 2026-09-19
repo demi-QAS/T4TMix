@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>T4T Mix — mixtapes, minus the necklace</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg-blobs" aria-hidden="true"></div>
+
+<!-- ============ SCREEN 1: HERO ============ -->
+<section id="screen-hero" class="screen active">
+  <div class="topbadge">🌈 a Queer Accounting Solutions creation</div>
+  <div class="hero-wrap">
+    <div class="wordmark">
+      <span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span>
+    </div>
+    <p class="tagline">mixtapes, minus the necklace.</p>
+    <p class="subtagline">no gatekeeping, just good taste. paste a playlist, dress it up, send the whole feeling.</p>
+
+    <div class="link-card">
+      <label class="link-label">🎧 Spotify playlist link</label>
+      <input id="spotify-input" type="text" value="https://open.spotify.com/playlist/7ldeWYMpsY7YxGPYDSmW9p" />
+      <label class="link-label soon">▶️ YouTube Music link <span class="soon-badge">coming soon</span></label>
+      <input id="ytm-input" type="text" placeholder="paste a YouTube Music link..." disabled />
+      <button id="btn-load" class="btn-primary">Load my playlist →</button>
+    </div>
+
+    <div class="freemium-badge">🎁 2 mixtapes free — then just $2 to send more</div>
+  </div>
+</section>
+
+<!-- ============ SCREEN 2: BUILDER (cassette + tracks + customize) ============ -->
+<section id="screen-builder" class="screen">
+  <div class="builder-header">
+    <div class="wordmark small"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></div>
+    <div class="playlist-title" id="playlist-title-display">Loading playlist…</div>
+  </div>
+
+  <!-- Skin picker -->
+  <div class="skin-picker" id="skin-picker">
+    <div class="skin-swatch active" data-skin="trans" title="Trans"></div>
+    <div class="skin-swatch" data-skin="lesbian" title="Lesbian"></div>
+    <div class="skin-swatch" data-skin="bi" title="Bi"></div>
+    <div class="skin-swatch" data-skin="nb" title="Nonbinary"></div>
+    <div class="skin-swatch" data-skin="pride" title="Pride"></div>
+  </div>
+
+  <!-- 3D Cassette -->
+  <div class="cassette-stage">
+    <div class="cassette-scene" id="cassette-scene">
+      <div class="cassette" id="cassette">
+        <div class="cassette-body">
+          <div class="cassette-label" id="cassette-label">
+            <div class="label-line-top">T4T MIX</div>
+            <div class="label-line-title" id="label-title">a mix for you</div>
+            <div class="label-line-sub">side A</div>
+            <div id="sticker-layer" class="sticker-layer"></div>
+            <div id="photo-layer" class="photo-layer"></div>
+          </div>
+          <div class="reels">
+            <div class="reel reel-left" id="reel-left"><div class="reel-hub"></div></div>
+            <div class="reel reel-right" id="reel-right"><div class="reel-hub"></div></div>
+          </div>
+          <div class="cassette-window"></div>
+          <div class="cassette-screws">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="cassette-flap" id="cassette-flap"></div>
+      </div>
+    </div>
+
+    <div class="tape-controls">
+      <button class="tctrl" id="btn-rewind" title="Rewind">⏪</button>
+      <button class="tctrl big" id="btn-play" title="Play">▶️</button>
+      <button class="tctrl" id="btn-ff" title="Fast Forward">⏩</button>
+      <button class="tctrl" id="btn-eject" title="Eject">⏏️</button>
+    </div>
+  </div>
+
+  <!-- Customize panel -->
+  <div class="panel" id="customize-panel">
+    <div class="panel-title">✨ deck it out</div>
+    <div class="sticker-tray" id="sticker-tray">
+      <div class="sticker-item" draggable="true" data-emoji="🏳️‍⚧️">🏳️‍⚧️</div>
+      <div class="sticker-item" draggable="true" data-emoji="🏳️‍🌈">🏳️‍🌈</div>
+      <div class="sticker-item" draggable="true" data-emoji="💗">💗</div>
+      <div class="sticker-item" draggable="true" data-emoji="⭐">⭐</div>
+      <div class="sticker-item" draggable="true" data-emoji="✨">✨</div>
+      <div class="sticker-item" draggable="true" data-emoji="📼">📼</div>
+      <div class="sticker-item" draggable="true" data-emoji="🎀">🎀</div>
+      <div class="sticker-item" draggable="true" data-emoji="🦋">🦋</div>
+    </div>
+    <div class="panel-row">
+      <label class="photo-upload-btn">
+        📷 add a photo
+        <input type="file" id="photo-input" accept="image/*" hidden>
+      </label>
+      <label class="title-edit">
+        title:
+        <input type="text" id="title-input" value="a mix for you" maxlength="28">
+      </label>
+    </div>
+    <p class="panel-hint">drag stickers onto the tape label above. tap a sticker on the tape to remove it.</p>
+  </div>
+
+  <!-- Track list -->
+  <div class="panel">
+    <div class="panel-title">🎵 tracklist — tap a song to leave a note</div>
+    <div id="spotify-embed-wrap"></div>
+    <div id="track-list" class="track-list"></div>
+  </div>
+
+  <button id="btn-to-send" class="btn-primary btn-wide">Finish & get my QR →</button>
+</section>
+
+<!-- ============ SCREEN 3: SEND ============ -->
+<section id="screen-send" class="screen">
+  <div class="wordmark small center"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></div>
+  <h2 class="send-heading">your mixtape is ready 🎉</h2>
+  <p class="send-sub">scan it, tap share, or copy the link — no necklace required.</p>
+
+  <div class="qr-card" id="qr-card">
+    <div id="qr-canvas-holder"></div>
+    <div class="qr-caption" id="qr-caption">a mix for you</div>
+  </div>
+
+  <div class="send-actions">
+    <button id="btn-share" class="btn-primary btn-wide">📤 Share it</button>
+    <button id="btn-copy" class="btn-secondary btn-wide">🔗 Copy link</button>
+  </div>
+
+  <div class="freemium-badge center">🎁 mixtape 1 of 2 free this month</div>
+
+  <button id="btn-back-to-builder" class="btn-ghost">← back to editing</button>
+</section>
+
+<!-- ============ TRACK NOTE MODAL ============ -->
+<div id="note-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div class="modal-track-name" id="modal-track-name">Track name</div>
+    <label class="modal-label">what does this song make you think of?</label>
+    <textarea id="modal-note-text" rows="3" placeholder="this is the song from that road trip..."></textarea>
+
+    <label class="modal-label">or leave a voice memo (max 20s)</label>
+    <div class="voice-recorder">
+      <button id="btn-record" class="btn-record">🎙️ record</button>
+      <span id="record-timer">0:00</span>
+    </div>
+    <audio id="voice-playback" controls style="display:none; width:100%; margin-top:8px;"></audio>
+
+    <button id="btn-save-note" class="btn-primary btn-wide">Save note</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
