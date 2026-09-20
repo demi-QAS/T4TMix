@@ -24,7 +24,10 @@ const FALLBACK_TRACKS = [
   { title: "I Wanna Be With You", artist: "Saúl David, GUMI" }
 ];
 const FALLBACK_PLAYLIST_TITLE = "Jack O'Lantern - Goodbye Playlist ✈️🌍 💕";
-const WORKER_URL = ""; // set once the Cloudflare Worker is deployed
+// Set this to your deployed Cloudflare Worker URL after `wrangler deploy`.
+// Example: "https://t4tmix-spotify.demi-qas.workers.dev"
+// The app will call ${WORKER_URL}/api/bridge?url=<spotify link> to resolve Spotify → YouTube.
+const WORKER_URL = "";
 
 const SKIN_GRADIENTS = {
   trans:  { shell:"linear-gradient(160deg,#e8e0d6,#d8cabf)", label:"#fbf6ea", tag:"#3a8fc7", spine:"linear-gradient(180deg,#5BCEFA,#F5A9B8)", shellPlayer:"linear-gradient(160deg,#5BCEFA,#F5A9B8)", shellFlat:"#5BCEFA", qr:"#5BCEFA" },
@@ -128,13 +131,26 @@ async function loadPlaylist(){
     state.playlistUrl = spotifyUrl; state.playlistId = id || "";
     if (WORKER_URL && id){
       try {
-        const resp = await fetch(`${WORKER_URL}?id=${id}`);
+        statusEl.textContent = "resolving Spotify tracks → YouTube (this takes a few seconds for a fresh playlist)…";
+        const resp = await fetch(`${WORKER_URL}/api/bridge?url=${encodeURIComponent(spotifyUrl)}`);
         if (!resp.ok) throw new Error("worker not ready");
         const data = await resp.json();
-        state.playlistTitle = data.title || FALLBACK_PLAYLIST_TITLE;
-        state.tracks = (data.tracks || FALLBACK_TRACKS).map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro" }));
-        statusEl.textContent = "loaded live from your Worker ✓";
-      } catch(e){ useFallbackTracks(statusEl); }
+        if (data.error) throw new Error(data.error);
+        state.playlistTitle = data.name || FALLBACK_PLAYLIST_TITLE;
+        state.tracks = (data.tracks || []).map(t => ({
+          display: t.title, original: t.title, artist: t.artist,
+          note: "", voiceMemoUrl: null, memoPosition: "intro",
+          ytVideoId: t.ytVideoId || null,
+          previewUrl: t.preview_url || null
+        }));
+        state.ytVideoIds = state.tracks.map(t => t.ytVideoId).filter(Boolean);
+        const resolved = state.ytVideoIds.length;
+        const total = state.tracks.length;
+        statusEl.textContent = `loaded ✓ ${resolved}/${total} tracks found on YouTube` + (resolved < total ? " (rest will use 30s Spotify preview)" : "");
+      } catch(e){
+        statusEl.textContent = "Worker not reachable — using fallback tracks. Check WORKER_URL + Worker deployment.";
+        useFallbackTracks(statusEl);
+      }
     } else { useFallbackTracks(statusEl); }
   } else {
     statusEl.textContent = "paste a playlist link first 👀";
@@ -528,23 +544,35 @@ function initYouTubePlayer(){
     height: "1", width: "1",
     playerVars: { playsinline: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
     events: {
-      onReady: (e) => { e.target.setVolume(80); },
+      onReady: (e) => {
+        e.target.setVolume(80);
+        // If we already have per-track YT video IDs (Spotify→YT bridge), queue the first one.
+        const firstId = getYtIdForTrack(state.currentTrackIndex);
+        if (firstId){ e.target.loadVideoById(firstId); }
+      },
       onStateChange: (e) => {
-        // 1 = playing, 0 = ended, 3 = buffering
         if (e.data === 1){ hideAdCoverAfterDelay(); }
-        if (e.data === 0){ // song ended → next
+        if (e.data === 0){
           nextTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
         }
-        if (e.data === 3){ showAdCover(); } // buffering often = pre-roll ad
+        if (e.data === 3){ showAdCover(); }
       }
     }
   };
-  if (state.ytPlaylistId){
+  // Only auto-load a YT playlist when the user pasted a YouTube link directly.
+  // For Spotify→YT bridge we drive playback one video at a time via loadVideoById().
+  if (state.source === "youtube" && state.ytPlaylistId){
     opts.playerVars.listType = "playlist";
     opts.playerVars.list = state.ytPlaylistId;
   }
   // eslint-disable-next-line no-undef
   state.ytPlayer = new YT.Player("yt-audio-player", opts);
+}
+
+// Return the YouTube video ID for a given track index (Spotify→YT bridge stores per-track IDs).
+function getYtIdForTrack(idx){
+  const t = state.tracks[idx];
+  return (t && t.ytVideoId) ? t.ytVideoId : null;
 }
 
 // Ad-cover overlay: whenever we transition tracks (or hit YT buffering), we show the hiss + play the
@@ -573,13 +601,18 @@ function crossfadeToTrack(idx){
   showAdCover();
   const t = state.tracks[idx];
   if (state.ytPlayer && t){
-    // Prefer playing by playlist index if we loaded a playlist; else search by title+artist
-    if (state.ytPlaylistId){
-      state.ytPlayer.playVideoAt(idx % (state.tracks.length || 1));
-    } else {
-      // No playlist ID → in v4 we fall back to loading the first known video ID if provided,
-      // otherwise the ad-cover + voice memo still plays and the honesty note explains.
-      // (Worker backend will hand us YT video IDs per track in the next release.)
+    if (state.source === "youtube" && state.ytPlaylistId){
+      // native YT playlist mode
+      try { state.ytPlayer.playVideoAt(idx % (state.tracks.length || 1)); } catch(_) {}
+    } else if (t.ytVideoId){
+      // Spotify→YouTube bridge: load the resolved video for this track
+      try { state.ytPlayer.loadVideoById(t.ytVideoId); } catch(_) {}
+    } else if (t.previewUrl){
+      // No YT match found → fall back to Spotify's 30s preview clip so SOMETHING plays
+      try {
+        const a = new Audio(t.previewUrl);
+        a.play().catch(()=>{});
+      } catch(_) {}
     }
   }
   updateNowPlayingUI();
@@ -745,3 +778,4 @@ document.addEventListener("DOMContentLoaded", () => {
   el("btn-share").addEventListener("click", shareTape);
   el("btn-copy").addEventListener("click", copyLink);
 });
+// v4.1 build - 2026-09-20T18:05:10Z
