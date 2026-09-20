@@ -248,55 +248,61 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .player-shell{ position:relative; transform-style:preserve-3d; transition:transform .4s ease; }
 .player-scene:hover .player-shell{ transform:translateY(-4px); }
 
-/* boombox shape — glass-sheen finish + metal carry-handle to match the
-   carabiner's hand-finished treatment (same brand gradient, same diagonal
-   glossy highlight direction, same silvery hardware tone as the carabiner
-   metal) so all three shells read as one cohesive, finished family */
-.shell-boombox{ width:300px; height:170px; position:relative; background:linear-gradient(135deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.10) 26%, rgba(255,255,255,0) 48%), var(--shell-bg, linear-gradient(160deg,#5BCEFA,#F5A9B8)); border-radius:20px; box-shadow:0 20px 40px rgba(43,32,54,0.3), inset 0 -8px 16px rgba(0,0,0,0.12); display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
-.shell-boombox::before{ content:""; position:absolute; top:-22px; left:50%; transform:translateX(-50%); width:84px; height:40px; border:7px solid #cdd6db; border-bottom:none; border-radius:50px 50px 0 0; box-shadow:0 2px 4px rgba(43,32,54,0.25); pointer-events:none; }
-.shell-boombox .shell-speaker{ width:70px; height:70px; border-radius:50%; background:radial-gradient(circle, #1c1424 0%, #2b2036 60%); flex-shrink:0; display:flex; align-items:center; justify-content:center; box-shadow:inset 0 0 0 4px rgba(255,255,255,0.3); }
-.shell-boombox .speaker-holes{ width:50px; height:50px; border-radius:50%; background: radial-gradient(circle, transparent 3px, #3a2e48 3.5px, #3a2e48 5px, transparent 5.5px) 0 0/14px 14px; opacity:0.8; }
-.shell-boombox .shell-tape-slot{ width:118px; height:76px; background:rgba(0,0,0,0.18); border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-
-/* carabiner — REAL metal D-ring: rendered as SVG (a stroked tube reads convincingly as metal;
-   CSS border tricks can't fake the continuous cylindrical gleam or a true hinge seam) */
-.shell-carabiner{ width:150px; height:322px; }
-.shell-carabiner .carabiner-frame{ position:relative; width:100%; height:200px; }
-.carabiner-svg{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:200px; filter:drop-shadow(0 10px 16px rgba(0,0,0,0.35)); overflow:visible; }
-.shell-carabiner .carabiner-glass{
-  position:absolute; top:34px; left:50%; transform:translateX(-50%);
-  width:56px; height:150px; border-radius:30px 10px 10px 30px;
-  background:linear-gradient(160deg, rgba(255,255,255,0.55), rgba(200,225,235,0.22) 40%, rgba(180,210,225,0.32));
-  backdrop-filter:blur(2px);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.5), inset 3px 3px 8px rgba(255,255,255,0.6), inset -4px -6px 10px rgba(120,150,165,0.25);
-  display:flex; align-items:center; justify-content:center; z-index:2;
+/* ===========================================================================
+   REAL SHELL ART — these three .shell-* rules now render the actual locked
+   full_recorder_{shape}.svg build (metal body, anodized sheen, 3-ring glass
+   seam, axis-aware hand-etched hatch, reels) instead of flat CSS boxes.
+   Each shell is a fixed-size stage (.shell-art-stage) with the SVG as a
+   plain <img> background layer, and the LIVE bits (tape title text + the
+   two spinning reel overlays) positioned in px directly on top, using the
+   exact label/reel geometry the Python build computed for that SVG. If the
+   build scripts ever change reel_row_frac / title_y_frac / inset_units for
+   a shape, re-run build_scripts/compute_overlay (see README) and update the
+   matching --ov-* custom properties below to match. ===========================================================================*/
+.shell-art-stage{ position:absolute; inset:0; display:block; }
+.shell-art-stage > img.shell-art-img{ display:block; width:100%; height:100%; pointer-events:none; user-select:none; -webkit-user-drag:none; }
+.shell-art-overlay-title{
+  position:absolute; display:flex; align-items:center; justify-content:center;
+  font-family:'T4TKalam', cursive; font-weight:700; color:var(--label-paper,#fbf6ea);
+  text-shadow:0 1px 1px rgba(0,0,0,0.4); pointer-events:none; overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; letter-spacing:0.2px;
 }
-.shell-carabiner .carabiner-glass .shell-tape-slot{ width:48px; height:42px; background:rgba(0,0,0,0.12); border-radius:6px; display:flex; align-items:center; justify-content:center; backdrop-filter:none; }
-.shell-carabiner .carabiner-glass .mini-tape{ transform:scale(0.66); }
-.shell-carabiner .carabiner-body{ width:100%; height:110px; background:var(--shell-bg, linear-gradient(160deg,#5BCEFA,#F5A9B8)); border-radius:22px; margin-top:6px; box-shadow:0 20px 40px rgba(43,32,54,0.3); display:flex; align-items:center; justify-content:center; gap:10px; padding:14px; position:relative; z-index:2; }
-.shell-carabiner .shell-speaker{ width:40px; height:40px; border-radius:50%; background:radial-gradient(circle, #1c1424 0%, #2b2036 60%); box-shadow:inset 0 0 0 3px rgba(255,255,255,0.3); flex-shrink:0; }
-.shell-carabiner .speaker-holes{ width:28px; height:28px; margin:6px; border-radius:50%; background: radial-gradient(circle, transparent 2px, #3a2e48 2.5px, #3a2e48 3.5px, transparent 4px) 0 0/9px 9px; opacity:0.8; }
-
-/* heart shape — same glass-sheen finish as boombox/carabiner, plus a
-   hand-etched stitched-seam dashed outline around each lobe (echoes the
-   carabiner's hand-etched hatch line language) for a cute, plush, whimsical
-   handmade feel rather than a flat CSS shape */
-.shell-heart{ width:220px; height:200px; position:relative; }
-.shell-heart .heart-shape{ width:100%; height:100%; position:relative; }
-.shell-heart .heart-shape::before, .shell-heart .heart-shape::after{
-  content:""; position:absolute; top:0; width:60%; height:80%;
-  background:linear-gradient(135deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.10) 26%, rgba(255,255,255,0) 48%), var(--shell-bg, linear-gradient(160deg,#5BCEFA,#F5A9B8));
-  border-radius:50% 50% 0 0; box-shadow:0 20px 40px rgba(43,32,54,0.25);
-  border:2px dashed rgba(255,255,255,0.6);
+.shell-art-overlay-reel{ position:absolute; border-radius:50%; pointer-events:none; }
+.shell-art-overlay-reel .reel-spokes{ width:100%; height:100%; position:relative; }
+.shell-art-overlay-reel .reel-spokes::before, .shell-art-overlay-reel .reel-spokes::after{
+  content:""; position:absolute; top:50%; left:50%; width:74%; height:2px;
+  background:rgba(5,3,8,0.55); transform-origin:center;
 }
-.shell-heart .heart-shape::before{ left:50%; transform:rotate(-45deg); transform-origin:0 100%; }
-.shell-heart .heart-shape::after{ left:0; transform:rotate(45deg); transform-origin:100% 100%; }
-.shell-heart .shell-tape-slot{ position:absolute; top:44%; left:50%; transform:translate(-50%,-50%); width:96px; height:58px; background:rgba(0,0,0,0.2); border-radius:8px; z-index:2; display:flex; align-items:center; justify-content:center; }
-.shell-heart .shell-speaker{ position:absolute; top:20%; width:34px; height:34px; border-radius:50%; background:radial-gradient(circle, #1c1424 0%, #2b2036 60%); z-index:2; box-shadow:inset 0 0 0 3px rgba(255,255,255,0.3); }
-.shell-heart .shell-speaker.left{ left:22%; } .shell-heart .shell-speaker.right{ right:22%; }
-.shell-heart .speaker-holes{ width:24px; height:24px; margin:5px; border-radius:50%; background: radial-gradient(circle, transparent 2px, #3a2e48 2.5px, #3a2e48 3.5px, transparent 4px) 0 0/8px 8px; opacity:0.8; }
+.shell-art-overlay-reel .reel-spokes::before{ transform:translate(-50%,-50%) rotate(0deg); }
+.shell-art-overlay-reel .reel-spokes::after{ transform:translate(-50%,-50%) rotate(90deg); }
+.shell-art-overlay-reel.spinning .reel-spokes{ animation:spin 1.4s linear infinite; }
 
-/* mini tape sitting inside the recorder — mirrors the real cassette shape/label */
+/* boombox: real art at 300x270 (top_margin 60 for the chrome carry-handle) */
+.shell-boombox{ width:300px; height:270px; }
+.shell-boombox .shell-tape-slot{ position:absolute; left:82px; top:112px; width:136px; height:106px; display:flex; align-items:center; justify-content:center; }
+.shell-boombox .shell-art-overlay-title{ left:82px; top:126.9px; width:136px; height:16px; font-size:12px; }
+.shell-boombox .shell-art-overlay-reel.left{ left:102.4px; top:165.1px; width:38px; height:38px; }
+.shell-boombox .shell-art-overlay-reel.right{ left:159.6px; top:165.1px; width:38px; height:38px; }
+/* speakers are baked into the SVG art itself now — no separate CSS speaker div needed */
+
+/* carabiner: real art at 170x267.3 (target_w 260 scaled to 170, top_margin 46) */
+.shell-carabiner{ width:170px; height:267.3px; }
+.shell-carabiner .shell-tape-slot{ position:absolute; left:42.7px; top:69.8px; width:85.9px; height:156.5px; display:flex; align-items:center; justify-content:center; }
+.shell-carabiner .shell-art-overlay-title{ left:42.7px; top:88.7px; width:85.9px; height:10.5px; font-size:8.5px; }
+.shell-carabiner .shell-art-overlay-reel.left{ left:48.8px; top:135px; width:26px; height:26px; }
+.shell-carabiner .shell-art-overlay-reel.right{ left:76.1px; top:135px; width:26px; height:26px; }
+
+/* heart: real art at 220x235.6 (target_w 260 scaled to 220, top_margin 40) */
+.shell-heart{ width:220px; height:235.6px; }
+.shell-heart .shell-tape-slot{ position:absolute; left:55.9px; top:79.7px; width:108.2px; height:89.9px; display:flex; align-items:center; justify-content:center; }
+.shell-heart .shell-art-overlay-title{ left:55.9px; top:92.6px; width:108.2px; height:13.5px; font-size:9.5px; }
+.shell-heart .shell-art-overlay-reel.left{ left:82.85px; top:122.15px; width:25.4px; height:25.4px; }
+.shell-heart .shell-art-overlay-reel.right{ left:112.45px; top:122.15px; width:25.4px; height:25.4px; }
+
+/* the interactive title text + reels are the ONLY thing app.js swaps per
+   track/skin now — the tape body itself is baked into the shell art, so
+   there's no separate .mini-tape rendered on top of these three shapes
+   (kept below, still used for any future "floating tape" preview needs) */
 .mini-tape{ width:92px; height:58px; background:var(--tape-shell, linear-gradient(160deg,#efe6de,#ded1c4)); border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.15), 0 3px 6px rgba(0,0,0,0.3); padding:4px; gap:2px; }
 .mini-tape-label{ font-family:'T4TKalam', cursive; font-size:10px; font-weight:700; color:#2b2036; background:var(--label-paper,#fbf6ea); padding:2px 6px; border-radius:3px; max-width:80px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .mini-tape-reels{ display:flex; gap:8px; }
