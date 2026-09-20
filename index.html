@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>T4T Mix — mixtapes, minus the necklace</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style_v4_patch.css">
 </head>
 <body>
 
@@ -23,11 +24,17 @@
     <div class="link-card">
       <label class="link-label">🎧 Spotify playlist link</label>
       <input id="spotify-input" type="text" value="https://open.spotify.com/playlist/7ldeWYMpsY7YxGPYDSmW9p" />
-      <label class="link-label soon">▶️ YouTube Music link <span class="soon-badge">also supported</span></label>
+      <label class="link-label soon">▶️ YouTube / YouTube Music link <span class="soon-badge">live playback</span></label>
       <input id="ytm-input" type="text" placeholder="paste a YouTube Music / YouTube playlist link..." />
       <button id="btn-load" class="btn-primary">Load my playlist →</button>
       <div id="load-status" class="load-status"></div>
     </div>
+
+    <p class="honesty-note">
+      💌 heads up: for the recipient to hear <strong>full songs</strong>, we play through YouTube by default —
+      that means an occasional short ad may slip in between tracks. we soften it with tape hiss + your voice memos so it
+      feels like part of the mixtape. no ads = a paid Spotify / Apple Music lane (coming next release).
+    </p>
 
     <div class="freemium-badge">🎁 2 mixtapes free — then just $2 to send more</div>
   </div>
@@ -57,7 +64,7 @@
     <div class="skin-swatch" data-skin="pride" title="Pride"></div>
   </div>
 
-  <p class="hint-line">✍️ tap the label to write a title. tap the flip arrow to see the tracklist. drag stickers right onto the tape.</p>
+  <p class="hint-line">✍️ tap the label to write a title. tap the flip arrow to see the tracklist. drag stickers right onto the tape — tap one to move, drag a corner to resize, double-tap to remove.</p>
 
   <!-- CASSETTE STAGE -->
   <div class="cassette-stage">
@@ -70,6 +77,9 @@
           <div class="cassette-screw tr"></div>
           <div class="cassette-screw bl"></div>
           <div class="cassette-screw br"></div>
+
+          <!-- ENGRAVING: baked into the shell above the label (like a real cassette spine) -->
+          <div class="cassette-engraving" id="cassette-engraving" contenteditable="true" spellcheck="false" data-placeholder="✎ engrave a message (max 40)">✎ engrave a message</div>
 
           <div class="cassette-label" id="cassette-label">
             <div class="label-lines" aria-hidden="true"></div>
@@ -133,12 +143,25 @@
       <div class="sticker-item" draggable="true" data-emoji="🦋">🦋</div>
       <div class="sticker-item" draggable="true" data-emoji="💌">💌</div>
       <div class="sticker-item" draggable="true" data-emoji="🌙">🌙</div>
+      <!-- new T4T-native set -->
+      <div class="sticker-item" draggable="true" data-emoji="🐀" title="little rat">🐀</div>
+      <div class="sticker-item" draggable="true" data-emoji="🐸" title="frog">🐸</div>
+      <div class="sticker-item" draggable="true" data-emoji="👸" title="princess">👸</div>
+      <div class="sticker-item" draggable="true" data-emoji="🍄" title="mushroom">🍄</div>
+      <div class="sticker-item" draggable="true" data-emoji="🪱" title="worm">🪱</div>
+      <div class="sticker-item" draggable="true" data-emoji="🦂" title="silly creature">🦂</div>
+      <div class="sticker-item scar-sticker" draggable="true" data-emoji="scars" title="top surgery scars">
+        <svg viewBox="0 0 40 40" width="26" height="26" aria-label="top surgery scars">
+          <path d="M6 20 Q12 14 20 20 Q28 26 34 20" stroke="#c25e6a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+          <path d="M8 22 L11 22 M14 22 L17 22 M23 22 L26 22 M29 22 L32 22" stroke="#c25e6a" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
     </div>
     <label class="photo-upload-btn">
       📷 add a photo to the label
       <input type="file" id="cover-photo-input" accept="image/*" hidden>
     </label>
-    <p class="panel-hint">drag stickers straight onto the tape. tap a placed sticker to remove it.</p>
+    <p class="panel-hint">drag stickers straight onto the tape. tap once = select + drag / resize. double-tap = remove.</p>
   </div>
 
   <!-- THE LETTER FLAP -->
@@ -170,12 +193,24 @@
     <button class="modal-close" id="voice-modal-close">✕</button>
     <div class="modal-track-name" id="voice-track-name">Track name</div>
     <div class="modal-track-artist" id="voice-track-artist">Artist</div>
+
+    <label class="modal-label">rename it just for them (original stays in the credits)</label>
+    <input id="track-rename-input" type="text" placeholder="e.g. our summer 2020 song" />
+
     <label class="modal-label">what does this song make you think of?</label>
     <textarea id="track-note-text" rows="2" placeholder="this is the song from that road trip..."></textarea>
-    <label class="modal-label">or leave a voice memo (max 20s)</label>
+
+    <label class="modal-label">voice memo — plays as an intro before the track (max 20s)</label>
     <div class="voice-recorder">
       <button id="btn-record" class="btn-record">🎙️ record</button>
       <span id="record-timer">0:00</span>
+      <label class="memo-position">
+        <select id="memo-position">
+          <option value="intro">plays BEFORE the song</option>
+          <option value="outro">plays AFTER the song</option>
+          <option value="over-ad">plays over any ad, then the song</option>
+        </select>
+      </label>
     </div>
     <audio id="voice-playback" controls style="display:none; width:100%; margin-top:8px;"></audio>
     <button id="btn-save-voice" class="btn-primary btn-wide">save to this track</button>
@@ -212,6 +247,16 @@
   <div class="player-stage">
     <div class="player-scene" id="player-scene">
       <div class="player-shell shell-boombox" id="player-shell"></div>
+
+      <!-- The HIDDEN YouTube iframe — audio only. Kept out of the flow, on top of nothing.
+           Ads still play (ToS-compliant); we just cover the transition audio with the cassette-hiss layer. -->
+      <div id="yt-audio-host" class="yt-audio-host" aria-hidden="true"></div>
+
+      <!-- The ad-cover / voice-memo overlay layer -->
+      <div id="ad-cover" class="ad-cover">
+        <div class="ad-cover-hiss"></div>
+        <div class="ad-cover-label" id="ad-cover-label">🎙️ from the tape…</div>
+      </div>
     </div>
 
     <div class="tape-controls">
@@ -224,6 +269,7 @@
       <div class="np-label">🎧 now playing</div>
       <div class="np-track" id="np-track">—</div>
       <div class="np-artist" id="np-artist"></div>
+      <div class="np-original" id="np-original" style="display:none;"></div>
       <div class="np-note" id="np-note"></div>
       <button class="np-voice-btn" id="np-voice-btn" style="display:none;">🎙️ play their voice memo</button>
     </div>
@@ -232,12 +278,17 @@
   <div class="panel">
     <div class="panel-title">📷 wrap style</div>
     <div class="wrap-style-picker" id="wrap-style-picker">
-      <button class="wrap-btn active" data-wrap="fullbody">full-body skin</button>
-      <button class="wrap-btn" data-wrap="framed">framed window</button>
+      <button class="wrap-btn active" data-wrap="fullbody">wrap the whole player</button>
+      <button class="wrap-btn" data-wrap="framed">photo in the window</button>
+      <button class="wrap-btn" data-wrap="both">both (wrap + window)</button>
     </div>
     <label class="photo-upload-btn">
       📷 add a photo to the player
       <input type="file" id="shell-photo-input" accept="image/*" hidden>
+    </label>
+    <label class="photo-upload-btn" style="margin-top:8px;">
+      🖼️ add a photo for the window
+      <input type="file" id="shell-window-photo-input" accept="image/*" hidden>
     </label>
     <div class="panel-title" style="margin-top:16px;">🎨 more stickers</div>
     <div class="sticker-tray" id="shell-sticker-tray">
@@ -247,8 +298,11 @@
       <div class="sticker-item" draggable="true" data-emoji="⭐">⭐</div>
       <div class="sticker-item" draggable="true" data-emoji="✨">✨</div>
       <div class="sticker-item" draggable="true" data-emoji="🎀">🎀</div>
+      <div class="sticker-item" draggable="true" data-emoji="🐀">🐀</div>
+      <div class="sticker-item" draggable="true" data-emoji="🐸">🐸</div>
+      <div class="sticker-item" draggable="true" data-emoji="🍄">🍄</div>
     </div>
-    <p class="panel-hint">drag stickers onto the player shell above.</p>
+    <p class="panel-hint">drag stickers onto the player shell above. tap = drag / resize. double-tap = remove.</p>
   </div>
 
   <div class="send-actions">
@@ -268,9 +322,9 @@
     <div class="qr-caption" id="qr-caption">a mix for you</div>
   </div>
   <p class="qr-honesty-note" id="qr-honesty-note">
-    ⚠️ heads up: this QR currently opens the Spotify playlist itself. Your letter,
+    ⚠️ heads up: this QR currently opens the source playlist itself. Your letter,
     voice memos, and decorated tape live only in this browser tab for now —
-    saving the full decorated tape to open at this link is the next build.
+    the hosted "recipient page" so anyone can play the whole thing is the next build.
   </p>
 
   <div class="send-actions">
@@ -284,7 +338,10 @@
 </section>
 
 <script>window.__T4T_FONT_PLACEHOLDER__ = true;</script>
+<!-- YouTube IFrame API (audio lane) -->
+<script src="https://www.youtube.com/iframe_api"></script>
 <script src="qrcode_lib2.js"></script>
 <script src="app.js"></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

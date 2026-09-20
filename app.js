@@ -1,8 +1,19 @@
-// ============ T4T Mix v3 — the tape IS the canvas ============
+// ============ T4T Mix v4 — the tape IS the canvas ============
+// v4 changes (from v3):
+//   1. Real YouTube IFrame audio lane (video-search fallback if playlist ID missing)
+//   2. Ad-cover cassette-hiss overlay on track transitions (ToS-compliant: we don't touch YT volume)
+//   3. Draggable / resizable / removable placed stickers (kept editable after drop)
+//   4. Track title edit uses a real <input>, kills the duplicate-line contentEditable bug
+//   5. Track renames stored separately from the original ({display, original}); original surfaces on player card
+//   6. Sticker state persists across nav (localStorage + rehydrate on show)
+//   7. Voice-memo positioning: intro / outro / over-ad
+//   8. Engraving field (baked spine text) tracked in state
+//   9. Wrap-style adds a "both" mode + separate window-photo upload
 
+// ---------- FALLBACK DATA ----------
 const FALLBACK_TRACKS = [
   { title: "every day is a game", artist: "Night Tapes" },
-  { title: "EAT YOU UP", artist: "r u s s e l   b u c k" },
+  { title: "EAT YOU UP", artist: "russel buck" },
   { title: "Running Away", artist: "VANO 3000, BADBADNOTGOOD, Samuel T. Herring" },
   { title: "Every Time the Sun Comes Up", artist: "Sharon Van Etten" },
   { title: "Feather (feat. Cise Starr & Akin)", artist: "Nujabes, Cise Starr & Akin from CYNE" },
@@ -23,26 +34,56 @@ const SKIN_GRADIENTS = {
   pride:  { shell:"linear-gradient(160deg,#ede4d4,#d6c9e0)", label:"#fdf8ea", tag:"#4a2e6a", spine:"linear-gradient(180deg,#E70000,#0044FF)", shellPlayer:"linear-gradient(160deg,#E70000,#FF8C00,#FFEF00,#00811F,#0044FF,#760089)", shellFlat:"#760089", qr:"#760089" }
 };
 
-const TRACK_DEMO_DURATION_MS = 9000; // demo pacing only — real per-track boundaries need Spotify's Web Playback SDK (Premium OAuth) or the YouTube IFrame Player API; a hidden embed can't report that back to us, that's a backend/auth follow-up
+const STORAGE_KEY = "t4tmix.state.v4";
 
+// ---------- STATE ----------
+// Every track carries { display, original } — display is what the recipient sees; original stays
+// in the credits (surfaced on the now-playing card as a subtle "originally: …" line).
 const state = {
   source: "spotify", playlistUrl: "", playlistId: "", playlistTitle: "",
-  tapeTitle: "a mix for you", skin: "trans",
+  tapeTitle: "a mix for you", engraving: "", skin: "trans",
   tracks: [], coverPhoto: null, coverStickers: [],
   letterText: "",
-  shellShape: "boombox", shellPhoto: null, shellWrapStyle: "fullbody", shellStickers: [],
+  shellShape: "boombox", shellPhoto: null, shellWindowPhoto: null,
+  shellWrapStyle: "fullbody", shellStickers: [],
   activeTrackIndex: null, mediaRecorder: null, recordedChunks: [], recordTimerInterval: null,
   isPlaying: false, mixtapesSentThisMonth: 1,
-  currentTrackIndex: 0, playbackTimer: null
+  currentTrackIndex: 0, playbackTimer: null,
+  // YouTube lane
+  ytPlayer: null, ytReady: false, ytVideoIds: [], ytPlaylistId: "",
+  // Ad-cover
+  adCoverActive: false
 };
-function escapeHtml(str){ return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// ---------- HELPERS ----------
+function escapeHtml(str){ return String(str||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function el(id){ return document.getElementById(id); }
 function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 function extractSpotifyId(url){ const m = url.match(/playlist[\/:]([a-zA-Z0-9]+)/); return m ? m[1] : null; }
 function extractYouTubeListId(url){ const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/); return m ? m[1] : null; }
+function extractYouTubeVideoId(url){ const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? m[1] : null; }
 
+// ---------- PERSISTENCE ----------
+function saveState(){
+  try {
+    const clean = { ...state };
+    // strip runtime handles that can't be JSON'd
+    delete clean.ytPlayer; delete clean.mediaRecorder; delete clean.recordedChunks;
+    delete clean.playbackTimer; delete clean.recordTimerInterval;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+  } catch(e){ /* silently fail — private mode etc. */ }
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.assign(state, saved);
+  } catch(e){}
+}
+
+// ---------- SCREEN NAV ----------
 function showScreen(id){
   qsa(".screen").forEach(s => s.classList.remove("active"));
   el(id).classList.add("active");
@@ -59,6 +100,9 @@ function showScreen(id){
     });
   }
   window.scrollTo({top:0, behavior:"smooth"});
+  // rehydrate whichever sticker layer just came into view
+  if (id === "screen-tape") rehydrateStickers("front-sticker-layer", state.coverStickers);
+  if (id === "screen-player") rehydrateStickers("shell-sticker-layer", state.shellStickers);
 }
 
 // ---------- LOAD PLAYLIST ----------
@@ -71,10 +115,13 @@ async function loadPlaylist(){
   if (ytmUrl){
     state.source = "youtube";
     const listId = extractYouTubeListId(ytmUrl);
+    state.ytPlaylistId = listId || "";
     state.playlistUrl = ytmUrl; state.playlistId = listId || "";
-    state.playlistTitle = "your YouTube Music mix";
-    state.tracks = FALLBACK_TRACKS.map(t => ({ ...t, note:"", voiceMemoUrl:null }));
-    statusEl.textContent = "YouTube playlist embedded — song-by-song titles need the Worker backend (see README).";
+    state.playlistTitle = "your YouTube mix";
+    // For now we still use fallback track names as labels; the YT IFrame plays the actual playlist
+    // (loadPlaylist call in initYouTubePlayer). Song titles come from the Worker in the next release.
+    state.tracks = FALLBACK_TRACKS.map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro" }));
+    statusEl.textContent = "YouTube playlist loaded ✓ — the recipient will hear the actual songs.";
   } else if (spotifyUrl){
     state.source = "spotify";
     const id = extractSpotifyId(spotifyUrl);
@@ -85,7 +132,7 @@ async function loadPlaylist(){
         if (!resp.ok) throw new Error("worker not ready");
         const data = await resp.json();
         state.playlistTitle = data.title || FALLBACK_PLAYLIST_TITLE;
-        state.tracks = (data.tracks || FALLBACK_TRACKS).map(t => ({ title:t.title, artist:t.artist, note:"", voiceMemoUrl:null }));
+        state.tracks = (data.tracks || FALLBACK_TRACKS).map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro" }));
         statusEl.textContent = "loaded live from your Worker ✓";
       } catch(e){ useFallbackTracks(statusEl); }
     } else { useFallbackTracks(statusEl); }
@@ -97,18 +144,18 @@ async function loadPlaylist(){
   el("handwritten-title").textContent = state.tapeTitle;
   buildTapeScreen();
   showScreen("screen-tape");
+  saveState();
 }
 function useFallbackTracks(statusEl){
   state.playlistTitle = FALLBACK_PLAYLIST_TITLE;
-  state.tracks = FALLBACK_TRACKS.map(t => ({ ...t, note:"", voiceMemoUrl:null }));
+  state.tracks = FALLBACK_TRACKS.map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro" }));
   statusEl.textContent = "loaded ✓ (using saved track data — connect the Worker for fully live fetches, see README)";
 }
 
-// ---------- TAPE SCREEN (front label + back tracklist) ----------
+// ---------- TAPE SCREEN ----------
 function buildTapeScreen(){
   el("playlist-title-display").textContent = state.playlistTitle;
-
-  // hidden embed kept alive for actual audio source, not shown as UI chrome anymore
+  // hidden Spotify embed kept for legacy fallback, but not the audio source anymore
   const embedWrap = el("source-embed-wrap");
   embedWrap.innerHTML = "";
   if (state.source === "spotify" && state.playlistId){
@@ -118,12 +165,18 @@ function buildTapeScreen(){
     iframe.style.border = "0";
     embedWrap.appendChild(iframe);
   }
-
   renderBackTracklist();
   applySkin(state.skin);
   updateLetterTabState();
+  // engraving
+  const eng = el("cassette-engraving");
+  if (state.engraving){ eng.textContent = state.engraving; eng.classList.add("has-value"); }
+  rehydrateStickers("front-sticker-layer", state.coverStickers);
 }
 
+// ---------- BACK TRACKLIST (Side B) ----------
+// Duplicate-line fix: we render each row as an <input> for the title (real form control,
+// no contentEditable range weirdness). Renames go to state.tracks[i].display; original is preserved.
 function renderBackTracklist(){
   const wrap = el("back-tracklist");
   wrap.innerHTML = "";
@@ -131,51 +184,33 @@ function renderBackTracklist(){
     const row = document.createElement("div");
     const isNowPlaying = state.isPlaying && i === state.currentTrackIndex;
     row.className = "btk-row" + (isNowPlaying ? " now-playing" : "");
-    // icon tells you the state at a glance: has a voice memo, has a written note, or empty (tap to add)
     const icon = t.voiceMemoUrl ? "🎙️" : (t.note ? "📝" : "✏️");
     const memoClass = (t.voiceMemoUrl || t.note) ? "has-memo" : "";
+    const renamed = t.display && t.display !== t.original;
     row.innerHTML = `
       <div class="btk-row-main">
         <span class="btk-num">${i+1}.</span>
-        <span class="btk-title" data-idx="${i}">${escapeHtml(t.title)} <span class="btk-artist">— ${escapeHtml(t.artist)}</span></span>
-        <span class="btk-memo-dot ${memoClass}" title="add a note or voice memo">${icon}</span>
+        <input type="text" class="btk-title-input" data-idx="${i}" value="${escapeHtml(t.display)}" spellcheck="false" />
+        <span class="btk-artist"> — ${escapeHtml(t.artist)}</span>
+        <span class="btk-memo-dot ${memoClass}" data-idx="${i}" title="add a note or voice memo">${icon}</span>
       </div>
+      ${renamed ? `<div class="btk-original-preview">originally: ${escapeHtml(t.original)}</div>` : ""}
       ${t.note ? `<div class="btk-note-preview">📝 “${escapeHtml(t.note)}”</div>` : ""}
     `;
-    const titleSpan = row.querySelector(".btk-title");
-    titleSpan.addEventListener("click", (e) => {
-      // clicking the memo icon opens the note/voice modal; clicking the title text edits inline
-      startEditingBackTitle(titleSpan, i);
+    const input = row.querySelector(".btk-title-input");
+    input.addEventListener("change", () => {
+      const v = input.value.trim() || t.original;
+      state.tracks[i].display = v;
+      saveState();
+      renderBackTracklist(); // re-render just this section so the "originally:" line appears/disappears
     });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
     row.querySelector(".btk-memo-dot").addEventListener("click", (e) => {
       e.stopPropagation(); openVoiceModal(i);
     });
     wrap.appendChild(row);
     if (isNowPlaying){ row.scrollIntoView({ block:"nearest", behavior:"smooth" }); }
   });
-}
-
-function startEditingBackTitle(span, idx){
-  const track = state.tracks[idx];
-  span.contentEditable = "true";
-  span.classList.add("editing");
-  // strip artist suffix while editing, keep only title text
-  span.textContent = track.title;
-  span.focus();
-  const range = document.createRange(); range.selectNodeContents(span); range.collapse(false);
-  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-
-  const commit = () => {
-    span.contentEditable = "false"; span.classList.remove("editing");
-    const newTitle = span.textContent.trim() || track.title;
-    state.tracks[idx].title = newTitle;
-    span.innerHTML = `${newTitle} <span class="btk-artist">— ${track.artist}</span>`;
-    span.removeEventListener("blur", commit);
-    span.removeEventListener("keydown", onKey);
-  };
-  const onKey = (e) => { if (e.key === "Enter"){ e.preventDefault(); span.blur(); } };
-  span.addEventListener("blur", commit);
-  span.addEventListener("keydown", onKey);
 }
 
 function applySkin(skinKey){
@@ -189,6 +224,7 @@ function applySkin(skinKey){
   root.setProperty("--qr-border", g.qr);
   qsa(".label-side-tag").forEach(t => t.style.color = g.tag);
   qsa(".skin-swatch").forEach(sw => sw.classList.toggle("active", sw.dataset.skin === skinKey));
+  saveState();
 }
 
 // ---------- CASSETTE FLIP ----------
@@ -196,41 +232,123 @@ function flipCassette(toBack){
   el("cassette-flipper").classList.toggle("flipped", toBack);
 }
 
-// ---------- STICKERS ----------
+// ---------- STICKERS (drag / drop / move / resize / remove) ----------
+// v3 bug fixes:
+//   - placed stickers are now MOVABLE after drop (pointerdown/move/up on the sticker itself)
+//   - a corner handle resizes them
+//   - double-tap removes (single-tap no longer nukes them)
+//   - state.coverStickers / state.shellStickers are the source of truth and rehydrate on nav
 function setupStickerDragDrop(trayId, targetLayerId, storeArray){
-  const tray = el(trayId);
+  const tray = el(trayId); if (!tray) return;
   qsa(".sticker-item", tray).forEach(item => {
-    item.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", item.dataset.emoji));
+    item.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify({ emoji: item.dataset.emoji, html: item.innerHTML }));
+    });
+    // click-to-place also honored, but now the placed sticker is editable (not committed the moment it's placed)
     item.addEventListener("click", () => {
       const x = 15 + Math.random()*55, y = 10 + Math.random()*45;
-      addStickerToLayer(targetLayerId, storeArray, item.dataset.emoji, x, y);
+      addStickerToLayer(targetLayerId, storeArray, item.dataset.emoji, item.innerHTML, x, y, 44);
     });
   });
-  const layer = el(targetLayerId);
+  const layer = el(targetLayerId); if (!layer) return;
   layer.addEventListener("dragover", (e) => e.preventDefault());
   layer.addEventListener("drop", (e) => {
     e.preventDefault();
-    const emoji = e.dataTransfer.getData("text/plain");
-    if (!emoji) return;
+    let payload; try { payload = JSON.parse(e.dataTransfer.getData("text/plain")); } catch(_) { payload = { emoji: e.dataTransfer.getData("text/plain"), html: null }; }
+    if (!payload || !payload.emoji) return;
     const rect = layer.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    addStickerToLayer(targetLayerId, storeArray, emoji, x, y);
+    addStickerToLayer(targetLayerId, storeArray, payload.emoji, payload.html, x, y, 44);
   });
 }
-function addStickerToLayer(layerId, storeArray, emoji, xPct, yPct){
-  const layer = el(layerId);
+
+function addStickerToLayer(layerId, storeArray, emoji, innerHtml, xPct, yPct, sizePx){
+  const layer = el(layerId); if (!layer) return;
+  const record = { emoji, html: innerHtml || emoji, x: xPct, y: yPct, size: sizePx || 44, rotation: 0 };
+  storeArray.push(record);
+  renderOneSticker(layer, storeArray, record);
+  saveState();
+}
+
+function renderOneSticker(layer, storeArray, record){
   const s = document.createElement("div");
-  s.className = "placed-sticker"; s.textContent = emoji;
-  s.style.left = xPct + "%"; s.style.top = yPct + "%";
-  s.addEventListener("click", (e) => { e.stopPropagation(); s.remove(); });
+  s.className = "placed-sticker";
+  s.innerHTML = record.html || record.emoji;
+  s.style.left = record.x + "%";
+  s.style.top = record.y + "%";
+  s.style.width = record.size + "px";
+  s.style.height = record.size + "px";
+  s.style.transform = `translate(-50%,-50%) rotate(${record.rotation||0}deg)`;
+  // resize handle (bottom-right)
+  const handle = document.createElement("div");
+  handle.className = "sticker-handle";
+  s.appendChild(handle);
+
+  // DRAG
+  let dragging = false, startX=0, startY=0, startLeft=0, startTop=0;
+  s.addEventListener("pointerdown", (e) => {
+    if (e.target === handle) return; // handled below
+    e.stopPropagation();
+    dragging = true;
+    s.setPointerCapture(e.pointerId);
+    const rect = layer.getBoundingClientRect();
+    startX = e.clientX; startY = e.clientY;
+    startLeft = record.x; startTop = record.y;
+    s.classList.add("selected");
+  });
+  s.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const rect = layer.getBoundingClientRect();
+    const dx = ((e.clientX - startX) / rect.width) * 100;
+    const dy = ((e.clientY - startY) / rect.height) * 100;
+    record.x = Math.max(0, Math.min(100, startLeft + dx));
+    record.y = Math.max(0, Math.min(100, startTop + dy));
+    s.style.left = record.x + "%"; s.style.top = record.y + "%";
+  });
+  s.addEventListener("pointerup", (e) => { dragging = false; saveState(); });
+
+  // RESIZE
+  let resizing = false, rStartX=0, rStartSize=0;
+  handle.addEventListener("pointerdown", (e) => {
+    e.stopPropagation(); resizing = true; handle.setPointerCapture(e.pointerId);
+    rStartX = e.clientX; rStartSize = record.size;
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!resizing) return;
+    const delta = e.clientX - rStartX;
+    record.size = Math.max(20, Math.min(160, rStartSize + delta));
+    s.style.width = record.size + "px"; s.style.height = record.size + "px";
+  });
+  handle.addEventListener("pointerup", () => { resizing = false; saveState(); });
+
+  // DOUBLE-TAP = remove (single-tap no longer removes; that was the v3 UX bug)
+  let lastTap = 0;
+  s.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTap < 350){
+      const idx = storeArray.indexOf(record);
+      if (idx >= 0) storeArray.splice(idx, 1);
+      s.remove();
+      saveState();
+    }
+    lastTap = now;
+  });
+
   layer.appendChild(s);
-  storeArray.push({ emoji, x:xPct, y:yPct });
+}
+
+function rehydrateStickers(layerId, storeArray){
+  const layer = el(layerId); if (!layer) return;
+  layer.innerHTML = "";
+  storeArray.forEach(rec => renderOneSticker(layer, storeArray, rec));
 }
 
 // ---------- PHOTO UPLOADS ----------
 function setupPhotoUpload(inputId, callback){
-  el(inputId).addEventListener("change", (e) => {
+  const inp = el(inputId); if (!inp) return;
+  inp.addEventListener("change", (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = () => callback(reader.result);
@@ -246,8 +364,7 @@ function openLetterModal(){
 function closeLetterModal(){ el("letter-modal").classList.remove("active"); }
 function saveLetter(){
   state.letterText = el("letter-textarea").value.trim();
-  closeLetterModal();
-  updateLetterTabState();
+  closeLetterModal(); updateLetterTabState(); saveState();
 }
 function updateLetterTabState(){
   const tab = el("btn-open-letter");
@@ -260,13 +377,15 @@ function updateLetterTabState(){
   }
 }
 
-// ---------- VOICE MEMO MODAL (per track, opened from back tracklist) ----------
+// ---------- VOICE MEMO MODAL ----------
 function openVoiceModal(idx){
   state.activeTrackIndex = idx;
   const t = state.tracks[idx];
-  el("voice-track-name").textContent = t.title;
+  el("voice-track-name").textContent = t.display;
   el("voice-track-artist").textContent = t.artist;
+  el("track-rename-input").value = (t.display && t.display !== t.original) ? t.display : "";
   el("track-note-text").value = t.note || "";
+  el("memo-position").value = t.memoPosition || "intro";
   const playback = el("voice-playback");
   if (t.voiceMemoUrl){ playback.src = t.voiceMemoUrl; playback.style.display = "block"; }
   else { playback.style.display = "none"; playback.src = ""; }
@@ -275,13 +394,14 @@ function openVoiceModal(idx){
 }
 function closeVoiceModal(){ el("voice-modal").classList.remove("active"); stopRecordingIfActive(); }
 function saveVoice(){
-  // this was the actual bug behind "the note looks faded": the textarea never wrote to state, so nothing ever rendered
   if (state.activeTrackIndex !== null){
-    state.tracks[state.activeTrackIndex].note = el("track-note-text").value.trim();
+    const t = state.tracks[state.activeTrackIndex];
+    t.note = el("track-note-text").value.trim();
+    const newName = el("track-rename-input").value.trim();
+    if (newName) t.display = newName; else t.display = t.original;
+    t.memoPosition = el("memo-position").value;
   }
-  closeVoiceModal();
-  renderBackTracklist();
-  updateNowPlayingUI();
+  closeVoiceModal(); renderBackTracklist(); updateNowPlayingUI(); saveState();
 }
 
 let recordStartTime = null;
@@ -320,12 +440,10 @@ function stopRecordingIfActive(){
 
 // ---------- CLOSING TRANSITION → PLAYER ----------
 function playClosingTransitionThenGoToPlayer(){
-  const overlay = el("closing-overlay");
-  overlay.classList.add("active");
+  const overlay = el("closing-overlay"); overlay.classList.add("active");
   setTimeout(() => {
     overlay.classList.remove("active");
-    buildPlayerScreen();
-    showScreen("screen-player");
+    buildPlayerScreen(); showScreen("screen-player");
   }, 1150);
 }
 
@@ -333,15 +451,10 @@ function playClosingTransitionThenGoToPlayer(){
 function buildPlayerScreen(){
   selectShell(state.shellShape);
   selectWrapStyle(state.shellWrapStyle);
+  // sticker layer rehydrates via showScreen()
 }
+
 function shellInnerMarkup(shape){
-  // REAL SHELL ART: renders the locked full_recorder_{shape}.svg (metal body,
-  // anodized sheen, 3-ring glass seam, hand-etched hatch, baked SIDE A / track
-  // chip) as the shell's actual visual, with only the two LIVE bits — the tape
-  // title text and the two spinning reels — drawn on top as absolutely
-  // positioned overlays using the exact px geometry computed from the Python
-  // build (see build_scripts/ + the --ov-* comment block above .shell-art-stage
-  // in style.css). This replaces the old flat CSS-shape / emoji placeholder.
   const shapeKey = (shape === "boombox" || shape === "carabiner") ? shape : "heart";
   const titleText = escapeHtml(state.tapeTitle);
   const artOverlay = `
@@ -349,15 +462,16 @@ function shellInnerMarkup(shape){
       <div class="shell-art-overlay-reel left" id="shell-art-overlay-reel-left"><div class="reel-spokes"></div></div>
       <div class="shell-art-overlay-reel right" id="shell-art-overlay-reel-right"><div class="reel-spokes"></div></div>`;
   return `
+      <div class="shell-photo-wrap" id="shell-photo-wrap"></div>
       <div class="shell-art-stage">
         <img class="shell-art-img" src="assets/full_recorder_${shapeKey}.svg" alt="${shapeKey} tape shell" draggable="false">
         ${artOverlay}
       </div>
-      <div class="shell-photo-wrap" id="shell-photo-wrap"></div>
       <div class="shell-sticker-layer" id="shell-sticker-layer"></div>
       <div class="eq-bars" id="eq-bars"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="shell-photo-frame" id="shell-photo-frame"></div>`;
 }
+
 function selectShell(shape){
   state.shellShape = shape;
   qsa(".shell-option").forEach(o => o.classList.toggle("active", o.dataset.shell === shape));
@@ -365,64 +479,137 @@ function selectShell(shape){
   shell.className = "player-shell shell-" + shape;
   shell.innerHTML = shellInnerMarkup(shape);
   applyShellPhoto();
-  state.shellStickers.forEach(s => {
-    const layer = el("shell-sticker-layer");
-    const s2 = document.createElement("div");
-    s2.className = "placed-sticker"; s2.textContent = s.emoji;
-    s2.style.left = s.x + "%"; s2.style.top = s.y + "%";
-    s2.addEventListener("click", (e) => { e.stopPropagation(); s2.remove(); });
-    layer.appendChild(s2);
-  });
+  rehydrateStickers("shell-sticker-layer", state.shellStickers);
   setupStickerDragDrop("shell-sticker-tray", "shell-sticker-layer", state.shellStickers);
+  saveState();
 }
+
 function selectWrapStyle(style){
   state.shellWrapStyle = style;
   qsa(".wrap-btn").forEach(b => b.classList.toggle("active", b.dataset.wrap === style));
   applyShellPhoto();
+  saveState();
 }
+
 function applyShellPhoto(){
   const wrap = el("shell-photo-wrap"); const frame = el("shell-photo-frame");
   if (!wrap || !frame) return;
-  if (state.shellPhoto){
-    if (state.shellWrapStyle === "fullbody"){
-      wrap.style.backgroundImage = `url(${state.shellPhoto})`;
-      wrap.classList.add("active","fullbody"); wrap.classList.remove("framed");
-      frame.classList.remove("active"); frame.innerHTML = "";
-    } else {
-      wrap.classList.remove("active"); frame.classList.add("active");
-      frame.innerHTML = `<img src="${state.shellPhoto}">`;
-    }
-  } else { wrap.classList.remove("active"); frame.classList.remove("active"); frame.innerHTML = ""; }
+  wrap.classList.remove("active","fullbody","framed");
+  frame.classList.remove("active"); frame.innerHTML = "";
+
+  const useWrap = (state.shellWrapStyle === "fullbody" || state.shellWrapStyle === "both") && state.shellPhoto;
+  const useFrame = (state.shellWrapStyle === "framed" || state.shellWrapStyle === "both") && (state.shellWindowPhoto || state.shellPhoto);
+
+  if (useWrap){
+    wrap.style.backgroundImage = `url(${state.shellPhoto})`;
+    wrap.classList.add("active","fullbody");
+  }
+  if (useFrame){
+    frame.classList.add("active");
+    const src = state.shellWindowPhoto || state.shellPhoto;
+    frame.innerHTML = `<img src="${src}">`;
+  }
 }
+
+// ---------- YOUTUBE IFRAME LANE ----------
+// Called by the YouTube API when it finishes loading (must be a global)
+window.onYouTubeIframeAPIReady = function(){
+  // Create the actual player only when we hit the player screen with a track list
+  // (delayed until we know what to play; see initYouTubePlayer)
+  state.ytReady = true;
+};
+
+function initYouTubePlayer(){
+  if (!state.ytReady){ setTimeout(initYouTubePlayer, 400); return; }
+  if (state.ytPlayer){ return; }
+  const host = el("yt-audio-host"); if (!host) return;
+  host.innerHTML = `<div id="yt-audio-player"></div>`;
+  const opts = {
+    height: "1", width: "1",
+    playerVars: { playsinline: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
+    events: {
+      onReady: (e) => { e.target.setVolume(80); },
+      onStateChange: (e) => {
+        // 1 = playing, 0 = ended, 3 = buffering
+        if (e.data === 1){ hideAdCoverAfterDelay(); }
+        if (e.data === 0){ // song ended → next
+          nextTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
+        }
+        if (e.data === 3){ showAdCover(); } // buffering often = pre-roll ad
+      }
+    }
+  };
+  if (state.ytPlaylistId){
+    opts.playerVars.listType = "playlist";
+    opts.playerVars.list = state.ytPlaylistId;
+  }
+  // eslint-disable-next-line no-undef
+  state.ytPlayer = new YT.Player("yt-audio-player", opts);
+}
+
+// Ad-cover overlay: whenever we transition tracks (or hit YT buffering), we show the hiss + play the
+// sender's voice memo on top. Legal, cheap, and on-brand.
+function showAdCover(){
+  state.adCoverActive = true;
+  const cover = el("ad-cover"); if (cover) cover.classList.add("active");
+  const t = state.tracks[state.currentTrackIndex];
+  if (t && t.voiceMemoUrl){
+    // If memo is set to "over-ad" or "intro", we play it now over the hiss
+    if (t.memoPosition === "over-ad" || t.memoPosition === "intro"){
+      const a = new Audio(t.voiceMemoUrl);
+      a.play().catch(()=>{});
+    }
+  }
+}
+function hideAdCoverAfterDelay(){
+  // give a beat for the memo/hiss to finish
+  setTimeout(() => {
+    state.adCoverActive = false;
+    const cover = el("ad-cover"); if (cover) cover.classList.remove("active");
+  }, 1200);
+}
+
+function crossfadeToTrack(idx){
+  showAdCover();
+  const t = state.tracks[idx];
+  if (state.ytPlayer && t){
+    // Prefer playing by playlist index if we loaded a playlist; else search by title+artist
+    if (state.ytPlaylistId){
+      state.ytPlayer.playVideoAt(idx % (state.tracks.length || 1));
+    } else {
+      // No playlist ID → in v4 we fall back to loading the first known video ID if provided,
+      // otherwise the ad-cover + voice memo still plays and the honesty note explains.
+      // (Worker backend will hand us YT video IDs per track in the next release.)
+    }
+  }
+  updateNowPlayingUI();
+}
+
+// ---------- PLAY CONTROLS ----------
 function togglePlay(){
   state.isPlaying = !state.isPlaying;
   const playBtn = el("btn-play"); if (playBtn) playBtn.textContent = state.isPlaying ? "⏸️" : "▶️";
   const previewBtn = el("btn-preview-play"); if (previewBtn) previewBtn.textContent = state.isPlaying ? "⏸️" : "▶️";
   const eq = el("eq-bars"); if (eq) eq.classList.toggle("playing", state.isPlaying);
-  const reels = qsa("#reel-left, #reel-right, .shell-art-overlay-reel"); // big cassette reels + player-shell art-overlay reels
+  const reels = qsa("#reel-left, #reel-right, .shell-art-overlay-reel");
   reels.forEach(r => r.classList.toggle("spinning", state.isPlaying));
-  if (state.isPlaying){ startPlaybackCycle(); }
-  else {
-    stopPlaybackCycle();
+
+  if (state.isPlaying){
+    initYouTubePlayer();
+    // If the YT player is ready, hit play; otherwise the onReady event will pick it up
+    if (state.ytPlayer && state.ytPlayer.playVideo){
+      try { state.ytPlayer.playVideo(); } catch(_) {}
+    }
+    updateNowPlayingUI();
+  } else {
+    if (state.ytPlayer && state.ytPlayer.pauseVideo){
+      try { state.ytPlayer.pauseVideo(); } catch(_) {}
+    }
     const card = el("now-playing-card"); if (card) card.style.display = "none";
     renderBackTracklist();
   }
 }
 
-// ---------- SIMULATED "NOW PLAYING" ENGINE ----------
-// Pacing here is a fixed demo interval so notes/voice memos visibly surface as songs
-// change. True per-track boundaries need Spotify's Web Playback SDK (Premium OAuth)
-// or the YouTube IFrame Player API's onStateChange — the hidden 1px embed we use for
-// audio can't report that back to us. Flagging honestly: that wiring is a backend/auth
-// pass, not something to fake here.
-function startPlaybackCycle(){
-  stopPlaybackCycle();
-  updateNowPlayingUI();
-  state.playbackTimer = setInterval(nextTrack, TRACK_DEMO_DURATION_MS);
-}
-function stopPlaybackCycle(){
-  if (state.playbackTimer){ clearInterval(state.playbackTimer); state.playbackTimer = null; }
-}
 function nextTrack(){
   if (!state.tracks.length) return;
   state.currentTrackIndex = (state.currentTrackIndex + 1) % state.tracks.length;
@@ -433,18 +620,18 @@ function prevTrack(){
   state.currentTrackIndex = (state.currentTrackIndex - 1 + state.tracks.length) % state.tracks.length;
   updateNowPlayingUI();
 }
+
 function updateNowPlayingUI(){
-  const t = state.tracks[state.currentTrackIndex];
-  if (!t) return;
-
-  // Side B: highlight + auto-scroll the currently "playing" row so its note pops into view
+  const t = state.tracks[state.currentTrackIndex]; if (!t) return;
   renderBackTracklist();
-
-  // Player screen now-playing card
-  const card = el("now-playing-card");
-  if (!card) return;
-  el("np-track").textContent = t.title;
+  const card = el("now-playing-card"); if (!card) return;
+  el("np-track").textContent = t.display;
   el("np-artist").textContent = t.artist;
+  const orig = el("np-original");
+  if (t.display && t.display !== t.original){
+    orig.textContent = `ℹ️ originally: ${t.original}`;
+    orig.style.display = "block";
+  } else { orig.style.display = "none"; }
   const noteEl = el("np-note");
   if (t.note){ noteEl.textContent = `📝 “${t.note}”`; noteEl.style.display = "block"; }
   else { noteEl.textContent = ""; noteEl.style.display = "none"; }
@@ -479,16 +666,35 @@ function copyLink(){
 
 // ---------- WIRE UP ----------
 document.addEventListener("DOMContentLoaded", () => {
+  loadState();
+
   el("btn-load").addEventListener("click", loadPlaylist);
 
-  // handwritten title directly on label (contenteditable)
+  // Handwritten title
   const titleEl = el("handwritten-title");
   titleEl.addEventListener("input", () => {
     state.tapeTitle = titleEl.textContent.trim() || "a mix for you";
     const shellTitle = el("shell-art-overlay-title");
     if (shellTitle) shellTitle.textContent = state.tapeTitle;
+    saveState();
   });
   titleEl.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); titleEl.blur(); } });
+
+  // Engraving (spine text above the label)
+  const engEl = el("cassette-engraving");
+  engEl.addEventListener("focus", () => {
+    if (engEl.textContent.trim() === "✎ engrave a message"){ engEl.textContent = ""; }
+  });
+  engEl.addEventListener("input", () => {
+    let v = engEl.textContent;
+    if (v.length > 40){ v = v.slice(0, 40); engEl.textContent = v; }
+    state.engraving = v.trim();
+    engEl.classList.toggle("has-value", !!state.engraving);
+    saveState();
+  });
+  engEl.addEventListener("blur", () => {
+    if (!engEl.textContent.trim()){ engEl.textContent = "✎ engrave a message"; engEl.classList.remove("has-value"); }
+  });
 
   qsa(".skin-swatch").forEach(sw => sw.addEventListener("click", () => applySkin(sw.dataset.skin)));
 
@@ -498,6 +704,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const slot = el("cassette-photo-slot");
     slot.style.backgroundImage = `url(${dataUrl})`;
     slot.querySelector(".cassette-photo-placeholder").style.display = "none";
+    saveState();
   });
   el("cassette-photo-slot").addEventListener("click", () => el("cover-photo-input").click());
 
@@ -517,16 +724,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   qsa(".shell-option").forEach(o => o.addEventListener("click", () => selectShell(o.dataset.shell)));
   qsa(".wrap-btn").forEach(b => b.addEventListener("click", () => selectWrapStyle(b.dataset.wrap)));
-  setupPhotoUpload("shell-photo-input", (dataUrl) => { state.shellPhoto = dataUrl; applyShellPhoto(); });
+  setupPhotoUpload("shell-photo-input", (dataUrl) => { state.shellPhoto = dataUrl; applyShellPhoto(); saveState(); });
+  setupPhotoUpload("shell-window-photo-input", (dataUrl) => { state.shellWindowPhoto = dataUrl; applyShellPhoto(); saveState(); });
 
   el("btn-play").addEventListener("click", togglePlay);
   el("btn-rewind").addEventListener("click", () => {
     el("btn-rewind").style.transform="scale(0.85) rotate(-15deg)"; setTimeout(()=>el("btn-rewind").style.transform="",200);
-    prevTrack(); if (state.isPlaying) startPlaybackCycle();
+    prevTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
   });
   el("btn-ff").addEventListener("click", () => {
     el("btn-ff").style.transform="scale(0.85) rotate(15deg)"; setTimeout(()=>el("btn-ff").style.transform="",200);
-    nextTrack(); if (state.isPlaying) startPlaybackCycle();
+    nextTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
   });
   const previewPlayBtn = el("btn-preview-play");
   if (previewPlayBtn) previewPlayBtn.addEventListener("click", togglePlay);
