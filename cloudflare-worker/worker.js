@@ -1,65 +1,56 @@
 /**
- * T4T Mix — Spotify Metadata Worker
- * -----------------------------------
- * Legit, sanctioned way to pull real track titles/artists/preview audio
- * for ANY public Spotify playlist, using Spotify's official Web API
- * (Client Credentials flow — no user login needed, just an app registration).
+ * T4T Mix — Spotify → YouTube Bridge Worker (v2)
+ * -----------------------------------------------
+ * Same as v1 (public playlist metadata via Spotify Client Credentials),
+ * PLUS the YouTube bridge: for each track, we search YouTube Data API
+ * for the best matching video ID and return it. The T4T Mix front-end
+ * then plays those YouTube video IDs through the IFrame Player API.
  *
- * SETUP:
- * 1. Go to https://developer.spotify.com/dashboard, log in with any Spotify account (free).
- * 2. Click "Create app". Name it anything (e.g. "T4T Mix"). Redirect URI can be anything
- *    like https://t4tmix.com/callback — we don't use login, so it's never actually hit.
- * 3. Copy the Client ID and Client Secret it gives you.
- * 4. Deploy this file as a Cloudflare Worker (Workers & Pages -> Create -> paste this code).
- * 5. In the Worker's Settings -> Variables, add two SECRET environment variables:
- *      SPOTIFY_CLIENT_ID     = <your client id>
- *      SPOTIFY_CLIENT_SECRET = <your client secret>
- * 6. Deploy. You'll get a URL like https://t4tmix-spotify.<you>.workers.dev
- * 7. Call it like:
- *      GET https://t4tmix-spotify.<you>.workers.dev/api/playlist?url=<spotify playlist URL>
- *    Returns JSON: { name, subtitle, coverArt, tracks: [{ title, artist, duration_ms, preview_url }] }
+ * SETUP (v2 additions):
+ * 1. Get a YouTube Data API key: https://console.cloud.google.com/apis/library/youtube.googleapis.com
+ *    (Enable the API → Credentials → Create API key → restrict to "YouTube Data API v3")
+ * 2. In the Worker's Settings → Variables, add a THIRD secret env var:
+ *      YOUTUBE_API_KEY = <your api key>
+ * 3. Deploy. New endpoint:
+ *      GET https://<worker>.workers.dev/api/bridge?url=<spotify playlist URL>
+ *    Returns: { name, subtitle, coverArt, tracks: [{ title, artist, duration_ms, ytVideoId }] }
  *
- * No audio is ever downloaded or stored by this Worker — it only fetches metadata
- * (titles/artists/cover art/30s preview URLs) that Spotify's own API returns for
- * public playlists. Playback should still happen via Spotify's official embed player
- * or by pointing an <audio> tag straight at the preview_url Spotify itself provides.
+ * The old /api/playlist endpoint is preserved as-is for backwards compat.
+ *
+ * QUOTA NOTES:
+ *   - YouTube Data API free tier: 10,000 units/day.
+ *   - search.list = 100 units per call → ~100 track lookups/day free.
+ *   - This Worker caches (title|artist) → ytVideoId in the CACHES API for 30 days,
+ *     so a viral playlist doesn't burn quota on repeat resolves. Cold new tracks
+ *     are the only ones that hit the API.
  */
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const API_BASE = "https://api.spotify.com/v1";
+const YT_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 
-// Simple in-memory token cache (resets on cold start — fine for this volume)
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
 async function getAccessToken(env) {
   const now = Date.now();
   if (cachedToken && now < tokenExpiresAt) return cachedToken;
-
   const creds = btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
   const resp = await fetch(TOKEN_URL, {
     method: "POST",
-    headers: {
-      "Authorization": `Basic ${creds}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
   });
-
-  if (!resp.ok) {
-    throw new Error(`Spotify auth failed: ${resp.status} ${await resp.text()}`);
-  }
-
+  if (!resp.ok) throw new Error(`Spotify auth failed: ${resp.status}`);
   const data = await resp.json();
   cachedToken = data.access_token;
-  tokenExpiresAt = now + (data.expires_in - 60) * 1000; // refresh 60s early
+  tokenExpiresAt = now + (data.expires_in - 60) * 1000;
   return cachedToken;
 }
 
 function extractPlaylistId(url) {
-  // Handles open.spotify.com/playlist/<id>?... and bare IDs
-  const match = url.match(/playlist\/([a-zA-Z0-9]+)/);
-  if (match) return match[1];
+  const m = url.match(/playlist\/([a-zA-Z0-9]+)/);
+  if (m) return m[1];
   if (/^[a-zA-Z0-9]{22}$/.test(url.trim())) return url.trim();
   return null;
 }
@@ -72,93 +63,144 @@ function corsHeaders() {
   };
 }
 
+async function fetchSpotifyTracks(playlistId, env) {
+  const token = await getAccessToken(env);
+  const metaResp = await fetch(
+    `${API_BASE}/playlists/${playlistId}?fields=name,description,owner.display_name,images`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!metaResp.ok) throw new Error(`Spotify API error: ${metaResp.status}`);
+  const meta = await metaResp.json();
+
+  let tracks = [];
+  let nextUrl = `${API_BASE}/playlists/${playlistId}/tracks?fields=items(track(name,duration_ms,preview_url,artists(name))),next&limit=100`;
+  while (nextUrl) {
+    const tr = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!tr.ok) break;
+    const td = await tr.json();
+    const items = td.items || [];
+    tracks = tracks.concat(
+      items.filter((it) => it.track).map((it) => ({
+        title: it.track.name,
+        artist: (it.track.artists || []).map((a) => a.name).join(", "),
+        duration_ms: it.track.duration_ms,
+        preview_url: it.track.preview_url,
+      }))
+    );
+    nextUrl = td.next || null;
+  }
+
+  return {
+    name: meta.name,
+    subtitle: meta.owner ? meta.owner.display_name : "",
+    coverArt: meta.images && meta.images.length ? meta.images[0].url : null,
+    tracks,
+  };
+}
+
+// -------- YouTube bridge --------
+
+async function resolveYouTubeId(title, artist, env, cache) {
+  const cacheKey = `yt:${title}|${artist}`.toLowerCase();
+  // Try CF cache first (30d TTL)
+  const cacheReq = new Request(`https://cache.t4tmix.local/${encodeURIComponent(cacheKey)}`);
+  if (cache) {
+    const hit = await cache.match(cacheReq);
+    if (hit) return await hit.text();
+  }
+  // Miss → search YouTube
+  const q = encodeURIComponent(`${title} ${artist}`);
+  const searchUrl = `${YT_SEARCH_URL}?part=snippet&type=video&maxResults=1&videoEmbeddable=true&q=${q}&key=${env.YOUTUBE_API_KEY}`;
+  const resp = await fetch(searchUrl);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const item = (data.items || [])[0];
+  const vid = item && item.id ? item.id.videoId : null;
+  if (vid && cache) {
+    await cache.put(cacheReq, new Response(vid, { headers: { "Cache-Control": "public, max-age=2592000" } }));
+  }
+  return vid;
+}
+
+async function handleBridgeRequest(request, env, ctx) {
+  const url = new URL(request.url);
+  const playlistUrl = url.searchParams.get("url");
+  if (!playlistUrl) {
+    return new Response(JSON.stringify({ error: "Missing ?url= parameter" }), {
+      status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }
+  const playlistId = extractPlaylistId(playlistUrl);
+  if (!playlistId) {
+    return new Response(JSON.stringify({ error: "Could not parse playlist ID" }), {
+      status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }
+  if (!env.YOUTUBE_API_KEY) {
+    return new Response(JSON.stringify({ error: "YOUTUBE_API_KEY not configured — set it in Worker Variables" }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }
+
+  try {
+    const spotifyData = await fetchSpotifyTracks(playlistId, env);
+    const cache = caches.default;
+    // Resolve YT IDs in parallel (with a small concurrency cap so we don't slam the API)
+    const CONCURRENCY = 5;
+    const resolved = [];
+    for (let i = 0; i < spotifyData.tracks.length; i += CONCURRENCY) {
+      const batch = spotifyData.tracks.slice(i, i + CONCURRENCY);
+      const ids = await Promise.all(
+        batch.map((t) => resolveYouTubeId(t.title, t.artist, env, cache).catch(() => null))
+      );
+      batch.forEach((t, j) => resolved.push({ ...t, ytVideoId: ids[j] }));
+    }
+    return new Response(JSON.stringify({ ...spotifyData, tracks: resolved }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...corsHeaders() },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() },
+    });
+  }
+}
+
+// Old endpoint kept for backwards compat
 async function handlePlaylistRequest(request, env) {
   const url = new URL(request.url);
   const playlistUrl = url.searchParams.get("url");
   if (!playlistUrl) {
     return new Response(JSON.stringify({ error: "Missing ?url= parameter" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+      status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() },
     });
   }
-
   const playlistId = extractPlaylistId(playlistUrl);
   if (!playlistId) {
-    return new Response(JSON.stringify({ error: "Could not parse a playlist ID from that URL" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+    return new Response(JSON.stringify({ error: "Could not parse playlist ID" }), {
+      status: 400, headers: { "Content-Type": "application/json", ...corsHeaders() },
     });
   }
-
   try {
-    const token = await getAccessToken(env);
-
-    // Fetch playlist metadata (name, cover, owner)
-    const metaResp = await fetch(
-      `${API_BASE}/playlists/${playlistId}?fields=name,description,owner.display_name,images`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!metaResp.ok) {
-      return new Response(JSON.stringify({ error: `Spotify API error: ${metaResp.status}` }), {
-        status: metaResp.status,
-        headers: { "Content-Type": "application/json", ...corsHeaders() },
-      });
-    }
-    const meta = await metaResp.json();
-
-    // Fetch tracks (paginate if needed — most mixtapes are well under 100 tracks)
-    let tracks = [];
-    let nextUrl = `${API_BASE}/playlists/${playlistId}/tracks?fields=items(track(name,duration_ms,preview_url,artists(name))),next&limit=100`;
-    while (nextUrl) {
-      const tracksResp = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}` } });
-      if (!tracksResp.ok) break;
-      const tracksData = await tracksResp.json();
-      const items = tracksData.items || [];
-      tracks = tracks.concat(
-        items
-          .filter((item) => item.track)
-          .map((item) => ({
-            title: item.track.name,
-            artist: (item.track.artists || []).map((a) => a.name).join(", "),
-            duration_ms: item.track.duration_ms,
-            preview_url: item.track.preview_url, // official 30s preview, or null if unavailable
-          }))
-      );
-      nextUrl = tracksData.next || null;
-    }
-
-    const result = {
-      name: meta.name,
-      subtitle: meta.owner ? meta.owner.display_name : "",
-      coverArt: meta.images && meta.images.length ? meta.images[0].url : null,
-      tracks,
-    };
-
-    return new Response(JSON.stringify(result), {
+    const data = await fetchSpotifyTracks(playlistId, env);
+    return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...corsHeaders() },
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() },
     });
   }
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
-    }
-
-    if (url.pathname === "/api/playlist") {
-      return handlePlaylistRequest(request, env);
-    }
-
-    return new Response("T4T Mix Spotify Worker — try /api/playlist?url=<spotify playlist url>", {
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
+    if (url.pathname === "/api/playlist") return handlePlaylistRequest(request, env);
+    if (url.pathname === "/api/bridge")  return handleBridgeRequest(request, env, ctx);
+    return new Response("T4T Mix Worker v2 — /api/playlist for metadata only, /api/bridge for Spotify→YouTube resolved", {
       headers: corsHeaders(),
     });
   },
 };
+// v4.1 build - 2026-09-20T18:05:10Z
