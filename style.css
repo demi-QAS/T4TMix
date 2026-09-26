@@ -174,9 +174,14 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .flip-btn span{ font-size:11px; }
 
 /* back label / tracklist */
-.back-label{ position:relative; background:var(--label-paper, #fbf6ea); border:1px solid rgba(0,0,0,0.08); border-radius:6px; height:210px; margin-top:2px; padding:22px 12px 10px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.08); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
-.back-tracklist{ font-family:'T4TKalam', cursive; font-size:14.5px; line-height:1.6; color:#2b2036; }
-.back-tracklist .btk-row{ padding:3px 0; border-radius:8px; transition:background .2s ease; }
+/* v5 Patch B — Side B scroll fix.
+   Give .back-label its own compositor layer + explicit touch-action so iOS
+   Safari doesn't drop the scroll gesture inside the rotateY(180deg) parent. */
+.back-label{ position:relative; background:var(--label-paper, #fbf6ea); border:1px solid rgba(0,0,0,0.08); border-radius:6px; height:210px; margin-top:2px; padding:22px 12px 10px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.08); overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; transform:translateZ(0); will-change:scroll-position; touch-action:pan-y; -webkit-user-select:none; user-select:none; }
+.back-tracklist{ font-family:'T4TKalam', cursive; font-size:14.5px; line-height:1.6; color:#2b2036; min-height:100%; padding-bottom:8px; }
+/* v5 Patch A — bigger touch target + tap feedback so the row FEELS tappable */
+.back-tracklist .btk-row{ padding:8px 6px; border-radius:8px; transition:background .2s ease; cursor:pointer; min-height:40px; }
+.back-tracklist .btk-row:active{ background:rgba(255,182,193,0.25); }
 .back-tracklist .btk-row-main{ display:flex; gap:8px; align-items:center; }
 .back-tracklist .btk-row.now-playing{ background:rgba(255,182,193,0.35); box-shadow:inset 0 0 0 2px rgba(255,105,135,0.5); }
 .back-tracklist .btk-row.now-playing .btk-num::before{ content:"🔊 "; }

@@ -191,8 +191,9 @@ function buildTapeScreen(){
 }
 
 // ---------- BACK TRACKLIST (Side B) ----------
-// Duplicate-line fix: we render each row as an <input> for the title (real form control,
-// no contentEditable range weirdness). Renames go to state.tracks[i].display; original is preserved.
+// v5 fix (Patch A): the whole row taps into the voice/note modal (which owns
+// rename + note + memo + record). No inline input — that was eating the tap
+// on mobile and hiding the modal behind a tiny ✏️ icon.
 function renderBackTracklist(){
   const wrap = el("back-tracklist");
   wrap.innerHTML = "";
@@ -200,33 +201,41 @@ function renderBackTracklist(){
     const row = document.createElement("div");
     const isNowPlaying = state.isPlaying && i === state.currentTrackIndex;
     row.className = "btk-row" + (isNowPlaying ? " now-playing" : "");
-    const icon = t.voiceMemoUrl ? "🎙️" : (t.note ? "📝" : "✏️");
-    const memoClass = (t.voiceMemoUrl || t.note) ? "has-memo" : "";
+    const hasMemo = !!(t.voiceMemoUrl || t.note);
+    const icon = t.voiceMemoUrl ? "🎙️" : (t.note ? "📝" : "＋");
     const renamed = t.display && t.display !== t.original;
     row.innerHTML = `
       <div class="btk-row-main">
         <span class="btk-num">${i+1}.</span>
-        <input type="text" class="btk-title-input" data-idx="${i}" value="${escapeHtml(t.display)}" spellcheck="false" />
+        <span class="btk-title">${escapeHtml(t.display)}</span>
         <span class="btk-artist"> — ${escapeHtml(t.artist)}</span>
-        <span class="btk-memo-dot ${memoClass}" data-idx="${i}" title="add a note or voice memo">${icon}</span>
+        <span class="btk-memo-dot ${hasMemo ? 'has-memo' : ''}" title="add a note or voice memo">${icon}</span>
       </div>
       ${renamed ? `<div class="btk-original-preview">originally: ${escapeHtml(t.original)}</div>` : ""}
-      ${t.note ? `<div class="btk-note-preview">📝 “${escapeHtml(t.note)}”</div>` : ""}
+      ${t.note ? `<div class="btk-note-preview">📝 &ldquo;${escapeHtml(t.note)}&rdquo;</div>` : ""}
     `;
-    const input = row.querySelector(".btk-title-input");
-    input.addEventListener("change", () => {
-      const v = input.value.trim() || t.original;
-      state.tracks[i].display = v;
-      saveState();
-      renderBackTracklist(); // re-render just this section so the "originally:" line appears/disappears
-    });
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
-    row.querySelector(".btk-memo-dot").addEventListener("click", (e) => {
-      e.stopPropagation(); openVoiceModal(i);
+    // Whole row → modal (mobile-friendly hit target)
+    row.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openVoiceModal(i);
     });
     wrap.appendChild(row);
     if (isNowPlaying){ row.scrollIntoView({ block:"nearest", behavior:"smooth" }); }
   });
+  // v5 fix (Patch B belt-and-suspenders): arm the scroll surface after each
+  // render so iOS Safari doesn't drop touch-scroll inside the 3D-transformed
+  // parent. Idempotent — safe to call every render.
+  armBackScroll();
+}
+
+// v5 scroll unlock — some iOS Safari versions need an explicit touchstart to
+// arm the scroll surface inside a 3D-transformed parent. Called from
+// renderBackTracklist() so it re-arms after every re-render.
+function armBackScroll(){
+  const wrap = el("back-label") || document.querySelector(".back-label");
+  if (!wrap || wrap.__armed) return;
+  wrap.__armed = true;
+  wrap.addEventListener("touchstart", () => {}, { passive: true });
 }
 
 function applySkin(skinKey){
