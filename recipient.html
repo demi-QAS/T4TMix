@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
+<meta name="theme-color" content="#05010b" />
+<title>T4T Mix — a mixtape for you</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;600&family=Kalam:wght@400;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/recipient.css" />
+</head>
+<body>
+
+<!-- Motion permission prompt (iOS 13+ requires user gesture) -->
+<div class="motion-prompt" id="motionPrompt">
+  <div class="mp-icon">📱</div>
+  <div class="mp-title">tilt to see inside</div>
+  <div class="mp-body">this mixtape has a little world around it. tap yes to let the room breathe when you move your phone.</div>
+  <button class="mp-btn" id="motionAllow">yes, let it breathe</button>
+  <div class="mp-skip" id="motionSkip">no thanks, just play the tape</div>
+</div>
+
+<!-- Unveiling: wrapper you tap to open -->
+<div class="unveiling" id="unveiling">
+  <div class="unveil-from" id="unveilFrom">from someone</div>
+  <div class="unveil-wrapper" id="unveilWrapper">
+    <div class="unveil-for" id="unveilFor">for you</div>
+  </div>
+  <div class="unveil-tap">tap to unwrap</div>
+  <div class="unveil-preamble">a T4T Mix</div>
+</div>
+
+<!-- The scene: everything parallaxes off this -->
+<main class="scene" id="scene" data-scene="desk" style="--tx:0;--ty:0;">
+
+  <div class="whats-this-chip" id="whatsThisBtn">what's this?</div>
+
+  <!-- Layer: WALL -->
+  <div class="layer layer-wall">
+    <div class="bg-wall"></div>
+    <div class="bg-window"></div>
+    <div class="bg-poster"></div>
+    <div class="bg-photo-strip">
+      <div class="ps-cell"></div><div class="ps-cell"></div>
+      <div class="ps-cell"></div><div class="ps-cell"></div>
+    </div>
+  </div>
+
+  <!-- Layer: FURNITURE -->
+  <div class="layer layer-furniture">
+    <div class="bg-desk"></div>
+    <div class="bg-dashboard"></div>
+    <div class="prop-rain"></div>
+  </div>
+
+  <!-- Layer: PROPS -->
+  <div class="layer layer-props">
+    <div class="prop-lamp"></div>
+    <div class="prop-books"></div>
+    <div class="prop-mug"></div>
+    <div class="prop-letter-folded" id="letterProp"></div>
+  </div>
+
+  <!-- Layer: PLAYER (the tape itself, foreground) -->
+  <div class="layer layer-player">
+    <div class="player-mount">
+      <div class="player-shell" id="playerShell">
+        <div class="tape-slot">
+          <div class="cassette" id="cassette">
+            <div class="cassette-face front">
+              <div class="cassette-title" id="tapeTitleFront">a mix for you</div>
+              <div class="cassette-photo" id="tapePhoto"></div>
+              <div class="cassette-window">
+                <div class="reel"></div>
+                <div class="reel"></div>
+              </div>
+            </div>
+            <div class="cassette-face back">
+              <div class="tracklist-back" id="tracklistBack"></div>
+            </div>
+          </div>
+        </div>
+        <div class="memo-notes" id="memoNotes"></div>
+        <div class="now-playing" id="nowPlaying">
+          <div class="np-track">—</div>
+          <div class="np-original"></div>
+        </div>
+        <div class="tape-controls">
+          <button class="tctrl" id="btnFlip" aria-label="flip tape">↺</button>
+          <button class="tctrl big" id="btnPlay" aria-label="play/pause">▶</button>
+          <button class="tctrl" id="btnNext" aria-label="next">⏭</button>
+        </div>
+        <button class="tctrl reply-envelope hidden" id="btnReply" aria-label="write a reply">✉︎</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- LETTER MODAL -->
+<div class="letter-modal" id="letterModal">
+  <div class="letter-card">
+    <button class="letter-close" id="letterClose">×</button>
+    <div class="letter-heading" id="letterHeading">a note from your sender</div>
+    <div class="letter-body" id="letterBody"></div>
+    <div class="letter-actions">
+      <button id="letterReply">write back</button>
+      <button class="secondary" id="letterPlay">play the tape</button>
+    </div>
+  </div>
+</div>
+
+<!-- PHOTO ZOOM -->
+<div class="photo-zoom" id="photoZoom">
+  <button class="photo-zoom-close" id="photoZoomClose">×</button>
+  <img id="photoZoomImg" alt="cover photo" />
+</div>
+
+<!-- REPLY MODAL -->
+<div class="reply-modal" id="replyModal">
+  <div class="reply-card" id="replyCard">
+    <div class="reply-title">write back</div>
+    <div class="reply-sub">one reply per tape — make it count</div>
+    <div class="reply-tabs">
+      <button class="reply-tab active" data-tab="voice">🎙️ voice</button>
+      <button class="reply-tab" data-tab="text">📝 text</button>
+    </div>
+
+    <div class="reply-pane active" data-pane="voice">
+      <div class="reply-record">
+        <button class="rec-btn" id="recBtn">●</button>
+        <div class="rec-timer" id="recTimer">0:00 / 0:20</div>
+        <div class="rec-hint">up to 20s</div>
+      </div>
+      <audio id="recPlayback" controls style="width:100%;display:none;margin-bottom:10px;"></audio>
+    </div>
+
+    <div class="reply-pane" data-pane="text">
+      <textarea class="reply-textarea" id="replyText" placeholder="what did the tape make you feel?"></textarea>
+    </div>
+
+    <button class="reply-send" id="replySend" disabled>send it</button>
+    <div class="reply-note">delivered to your sender via email · once sent, this closes</div>
+  </div>
+  <div class="reply-success hidden" id="replySuccess">
+    <div class="rs-icon">💌</div>
+    <div class="rs-title">sent</div>
+    <div class="rs-sub">they'll get it in a moment.</div>
+  </div>
+</div>
+
+<!-- WHAT'S THIS? -->
+<div class="whats-this-modal" id="whatsThisModal">
+  <div class="wt-card">
+    <button class="wt-close" id="wtClose">×</button>
+    <h3>this is a T4T Mix</h3>
+    <p>someone made you a mixtape. tap the wrapper to open it. tilt your phone — the room moves. flip the tape to see the tracklist. yellow sticky notes are voice memos from your sender.</p>
+    <p>the songs stream from Spotify or YouTube (your sender picked). the memos and their note to you live here.</p>
+    <p style="opacity:.7;font-size:12px;">made by <strong>Queer Accounting Solutions</strong>. no ads, no algorithm, no gatekeeping.</p>
+    <a class="wt-cta" href="https://t4tmix.com" target="_blank" rel="noopener">make one yourself →</a>
+  </div>
+</div>
+
+<!-- Server injects the tape ID here -->
+<script>window.__TAPE_ID__ = "__TAPE_ID__";</script>
+<!-- Spotify Web Playback SDK (loads lazily only if premium detected) -->
+<script src="/recipient.js" defer></script>
+</body>
+</html>
