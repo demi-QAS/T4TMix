@@ -1,0 +1,18 @@
+{
+  "name": "t4tmix-recipient-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "kv:create": "wrangler kv namespace create TAPES",
+    "r2:create": "wrangler r2 bucket create t4tmix-memos"
+  },
+  "dependencies": {
+    "mimetext": "^3.0.24"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}
