@@ -1,0 +1,40 @@
+{
+  // T4T Mix — ONE Worker: serves the sender app + recipient page (./public)
+  // and the API (./src). Replaces the old cloudflare-worker/ + recipient-worker/ split.
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Keep this "t4tmix" so it deploys over the existing
+  // t4tmix.queeraccountingsolutions.workers.dev project (the one wired to GitHub).
+  "name": "t4tmix",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // API + recipient routes always hit the Worker code first.
+    "run_worker_first": ["/api/*", "/t/*", "/embed/*"]
+  },
+
+  "vars": {
+    // Change to https://t4tmix.com once the domain is attached.
+    "APP_ORIGIN": "https://t4tmix.queeraccountingsolutions.workers.dev",
+    // Sites allowed to embed the player in an <iframe> (space-separated).
+    "EMBED_ORIGINS": "https://thepeoples990.com https://www.thepeoples990.com",
+    "MAX_TAPE_BYTES": "65536",
+    "MAX_MEMO_BYTES": "1048576",
+    "MAX_PHOTO_BYTES": "2097152",
+    "TAPE_TTL_DAYS": "180",
+    "MAX_BRIDGE_TRACKS": "50"
+  },
+
+  // No ids on purpose: wrangler >= 4.45 auto-creates these on first deploy.
+  // After the first deploy, paste the real ids back in (wrangler prints them).
+  "kv_namespaces": [{ "binding": "TAPES" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "t4tmix-media" }]
+
+  // Reply-by-email is OFF until Email Routing is enabled on the t4tmix.com zone.
+  // To turn it on, uncomment and list verified addresses (see docs/DEPLOY.md):
+  // ,"send_email": [{ "name": "SEND_EMAIL", "allowed_destination_addresses": ["demi@queeraccountingsolutions.com"] }]
+}
