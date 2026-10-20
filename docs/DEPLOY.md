@@ -12,7 +12,7 @@ This replaces the old two-Worker setup (`cloudflare-worker/` and `recipient-work
 npm install
 npx wrangler deploy
 ```
-On the first run, wrangler creates the `TAPES` namespace and the `t4tmix-media` bucket and prints their ids. Paste the KV `id` into `wrangler.jsonc` so later deploys reuse the same namespace.
+On the first deploy, Cloudflare creates the KV namespace and R2 bucket (names start with `t4tmix`). If you deploy through GitHub, the ids are only shown in the dashboard (Storage & Databases → KV / R2), not written back to the repo. Copy the KV `id` and the bucket name into `wrangler.jsonc` so later deploys always use the same storage.
 
 If you deploy by pushing to GitHub (Workers Builds), push the branch and use build command `npm install` and deploy command `npx wrangler deploy`.
 
