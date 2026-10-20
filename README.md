@@ -1,14 +1,14 @@
 # T4T Mix 📼
 
-**Mixtapes, minus the necklace.** Build a digital mixtape from a Spotify or YouTube playlist, wrap it, add voice memos, stickers and a letter, then send it as a link or QR code. The person you send it to unwraps it, listens, and can write back once.
+**Mixtapes, minus the necklace.** Build a digital mixtape from a Spotify or YouTube playlist, wrap it, pick the tape colour, pen and paper, add voice memos and a letter, then send it as a link or QR code. The person you send it to unwraps it, listens, and can write back once.
 
 A Queer Accounting Solutions creation.
 
-## What's in here (v0.6)
+## What's in here (v0.7)
 
 | Path | What it is |
 |---|---|
-| `public/` | The sender app (`index.html`, `app.js`, `style.css`) and the recipient page (`recipient.*`), plus fonts, art and the vendored QR library |
+| `public/` | The sender app (`index.html`, `app.js`, `style.css`), the recipient page (`recipient.*`), the shared player `player.js`, plus fonts, art and the vendored QR library |
 | `src/index.js` | One Cloudflare Worker: playlist bridge, saving tapes, media, replies, and the `/t/:id` and `/embed/:id` pages |
 | `wrangler.jsonc` | Worker config: KV `TAPES`, R2 `MEDIA`, vars |
 | `tests/smoke.mjs` | API smoke test (`npm test`) |
@@ -34,7 +34,9 @@ Read [`docs/DEPLOY.md`](docs/DEPLOY.md). Short version: `npx wrangler deploy`, t
 |---|---|
 | `GET /` | Sender app |
 | `GET /api/health` | Status and which features are switched on |
-| `GET /api/playlist?url=` / `/api/bridge` | Pull tracks from Spotify or YouTube, and match Spotify tracks to YouTube |
+| `GET /api/playlist?url=` | Pull tracks from Spotify or YouTube |
+| `GET /api/match?title=&artist=` | Find one song on YouTube (on demand, cached 30 days) |
+| `GET /api/bridge` | Older route, kept for compatibility (max 10 matches) |
 | `POST /api/tape` | Save a tape (multipart). Returns `id`, `ownerToken`, `url`, `embedUrl` |
 | `GET /api/tape/:id` | Public tape view (no email, no reply contents) |
 | `POST /api/tape/:id/reply` | The one reply the recipient can send |

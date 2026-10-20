@@ -1,542 +1,233 @@
 /* =========================================================================
-   T4T MIX — recipient runtime
-   Hydrates from /api/tape/:id, drives the tactile world, plays the tape,
-   handles the reply loop. Vanilla JS, no build step.
+   T4T MIX — the gift page (v0.7)
+   unwrap → one clean column: the player, our controls, the deck, the songs.
+   All playback goes through T4TDeck (player.js), so OUR play button works.
    ========================================================================= */
 (function () {
   "use strict";
-
   const TAPE_ID = window.__TAPE_ID__;
   const IS_EMBED = window.__T4T_EMBED__ === true;
   if (IS_EMBED) document.documentElement.classList.add("is-embed");
   const $ = (id) => document.getElementById(id);
-  const state = {
-    tape: null,
-    trackIdx: 0,
-    playing: false,
-    spotifyPlayer: null,
-    spotifyReady: false,
-    ytPlayer: null,
-    audioEl: null,      // for podcast/audio + memos
-    memoAudio: new Audio(),
-    replyToken: null,   // returned after successful reply
-    recording: null,    // { recorder, chunks, blob, url, seconds }
-    replyPayload: null, // { kind: "voice"|"text", blob?, text? }
+  const esc = (s) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const media = (f) => (f ? `/api/media/${TAPE_ID}/${encodeURIComponent(f)}` : null);
+  let tape = null, deck = null;
+
+  const LANE_NAMES = { spotify: "Spotify", youtube: "YouTube", preview: "previews" };
+  const LANE_FINE = {
+    spotify: "full songs if you're logged in to Spotify in this browser — 30-second previews if not.",
+    youtube: "full songs. YouTube may play a short ad now and then.",
+    preview: "30-second previews — no login needed.",
   };
 
-  /* ---------- BOOT ---------- */
   async function boot() {
-    if (!TAPE_ID || TAPE_ID === "__TAPE_ID__") {
-      console.warn("No tape id");
-      return;
-    }
+    if (!TAPE_ID || TAPE_ID === "__TAPE_ID__") return;
     try {
-      const tape = await fetchTape(TAPE_ID);
-      state.tape = tape;
-      hydrateScene(tape);
-      wireUnveiling();
-      wireLetter(tape);
-      wirePlayer(tape);
-      wireReply(tape);
-      wireWhatsThis();
-      wireParallax();
-    } catch (err) {
-      console.error("Boot failed", err);
-      document.body.innerHTML =
-        '<div style="color:#fff;padding:40px;font-family:Inter,sans-serif;text-align:center">this mixtape isn\u2019t available. it may have expired.</div>';
-    }
-  }
-  /* ---------- FETCH ---------- */
-  async function fetchTape(id) {
-    const r = await fetch(`/api/tape/${id}`, { headers: { accept: "application/json" } });
-    if (!r.ok) throw new Error("tape not found");
-    return r.json();
-  }
-  function mediaUrl(file) { return file ? `/api/media/${TAPE_ID}/${encodeURIComponent(file)}` : null; }
-  /* ---------- HYDRATE ---------- */
-  function hydrateScene(t) {
-    const scene = $("scene");
-    scene.dataset.scene = t.scene || "desk";
-
-    // Sender / recipient banners on unveiling
-    $("unveilFrom").textContent = t.senderName ? `from ${t.senderName}` : "from someone";
-    $("unveilFor").textContent = t.recipientName ? `for ${t.recipientName}` : "for you";
-
-    // Tape face
-    $("tapeTitleFront").textContent = titleOf(t);
-    if (t.coverPhoto) {
-      $("tapePhoto").style.backgroundImage = `url(${mediaUrl(t.coverPhoto)})`;
-      $("tapePhoto").classList.add("has-photo");
-      $("tapePhoto").addEventListener("click", () => {
-        $("photoZoomImg").src = mediaUrl(t.coverPhoto);
-        $("photoZoom").classList.add("open");
-      });
-    }
-    const pz = $("photoZoomClose");
-    if (pz) pz.addEventListener("click", () => $("photoZoom").classList.remove("open"));
-
-    // Pride skin + engraving + stickers on the tape face
-    document.documentElement.dataset.skin = t.skin || "trans";
-    if (t.engraving) {
-      const eng = document.createElement("div");
-      eng.className = "cassette-engraving";
-      eng.textContent = t.engraving;
-      $("cassette").querySelector(".cassette-face.front").appendChild(eng);
-    }
-    renderStickers($("cassette").querySelector(".cassette-face.front"), t.stickersFront);
-
-    // Player shell: the real boombox / carabiner / heart art
-    const shell = $("playerShell");
-    const shape = ["boombox", "carabiner", "heart"].includes(t.shell) ? t.shell : "boombox";
-    shell.classList.add(`shell-${shape}`);
-    const art = document.createElement("img");
-    art.className = "shell-art";
-    art.src = `/assets/full_recorder_${shape}.svg`;
-    art.alt = "";
-    art.setAttribute("aria-hidden", "true");
-    shell.prepend(art);
-    renderStickers(shell, t.stickersShell);
-
-    // Tracklist on back
-    renderTracklistBack(t);
-
-    // Memo sticky notes
-    renderMemoNotes(t);
-  }
-  function titleOf(t) {
-    return t.tapeTitle || (t.playlist && t.playlist.title) || "a mix for you";
-  }
-  function renderStickers(host, list) {
-    if (!host || !Array.isArray(list) || !list.length) return;
-    const layer = document.createElement("div");
-    layer.className = "sticker-layer";
-    for (const st of list) {
-      const d = document.createElement("div");
-      d.className = "sticker";
-      d.style.left = `${st.x}%`;
-      d.style.top = `${st.y}%`;
-      d.style.fontSize = `${Math.round((st.size || 44) * 0.7)}px`;
-      d.style.transform = `translate(-50%,-50%) rotate(${st.rotation || 0}deg)`;
-      if (st.emoji === "scars") d.innerHTML = SCARS_SVG;
-      else d.textContent = st.emoji;
-      layer.appendChild(d);
-    }
-    host.appendChild(layer);
-  }
-  const SCARS_SVG = '<svg viewBox="0 0 40 40" width="1em" height="1em" aria-label="top surgery scars"><path d="M5 22 Q12 28 19 22" stroke="#c0546f" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M21 22 Q28 28 35 22" stroke="#c0546f" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>';
-  function renderTracklistBack(t) {
-    const box = $("tracklistBack");
-    const tracks = t.tracks || [];
-    if (!tracks.length) {
-      box.innerHTML = '<div style="opacity:.6;padding:8px">no tracklist</div>';
+      const r = await fetch(`/api/tape/${TAPE_ID}`, { headers: { accept: "application/json" } });
+      if (!r.ok) throw new Error("not found");
+      tape = await r.json();
+    } catch (e) {
+      document.body.innerHTML = '<div class="gone"><p>📼</p><p>this mixtape isn\u2019t here anymore.<br>tapes keep for about six months.</p><a href="/">make your own →</a></div>';
       return;
     }
-    box.innerHTML = tracks.map((tr, i) => {
-      const has = tr.memo || tr.note ? "has" : "";
-      return `<div class="row" data-i="${i}">
-        <div class="num">${String(i+1).padStart(2,"0")}</div>
-        <div class="title">${escapeHtml(tr.display || tr.original || "untitled")}</div>
-        <div class="dot ${has}">${tr.memo ? "🎙️" : tr.note ? "📝" : "·"}</div>
-      </div>`;
-    }).join("");
-    box.querySelectorAll(".row").forEach(r => {
-      r.addEventListener("click", () => jumpToTrack(parseInt(r.dataset.i, 10)));
-    });
+    dress(tape);
+    wireGift();
+    wireSheets();
+    wireReply();
   }
-  function renderMemoNotes(t) {
-    const box = $("memoNotes");
-    const notes = (t.tracks || [])
-      .map((tr, i) => ({ i, tr }))
-      .filter(x => x.tr.memo || x.tr.note);
-    if (!notes.length) { box.style.display = "none"; return; }
-    box.innerHTML = notes.map(({ i, tr }) => {
-      const cls = tr.memo ? "has-audio" : "has-note-only";
-      const label = (tr.display || tr.original || `#${i+1}`).slice(0, 22);
-      return `<button class="memo-note ${cls}" data-i="${i}">${escapeHtml(label)}</button>`;
-    }).join("");
-    box.querySelectorAll(".memo-note").forEach(b => {
-      b.addEventListener("click", () => openMemo(parseInt(b.dataset.i, 10)));
-    });
-  }
-  function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, c => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[c]));
-  }
-  /* ---------- PARALLAX (tilt or touch fallback) ---------- */
-  function wireParallax() {
-    const scene = $("scene");
-    let tx = 0, ty = 0;
 
-    const set = (nx, ny) => {
-      tx += (nx - tx) * 0.15; // smooth
-      ty += (ny - ty) * 0.15;
-      scene.style.setProperty("--tx", tx.toFixed(3));
-      scene.style.setProperty("--ty", ty.toFixed(3));
-    };
+  /* ---------- dress the page with the sender's choices ---------- */
+  function dress(t) {
+    const root = document.documentElement;
+    root.dataset.skin = t.skin || "trans";
+    root.dataset.ink = t.ink || "midnight";
+    root.dataset.paper = t.paper || "cream";
+    $("giftFrom").textContent = t.senderName ? `${t.senderName} made you something` : "someone made you something";
+    $("giftFor").textContent = t.recipientName ? `for ${t.recipientName}` : "for you";
+    const title = t.tapeTitle || "a mix for you";
+    $("tapeTitle").textContent = title;
+    $("shellTitle").textContent = title;
+    document.title = `${title} — a T4T Mix`;
+    const who = [t.senderName && `from ${t.senderName}`, t.recipientName && `for ${t.recipientName}`].filter(Boolean).join(" · ");
+    $("fromTo").textContent = who;
 
-    const onOrient = (e) => {
-      // gamma = left/right tilt (-90..90), beta = front/back (-180..180)
-      const gx = clamp((e.gamma || 0) / 30, -1, 1);
-      const gy = clamp(((e.beta || 0) - 45) / 30, -1, 1);
-      set(gx, gy);
-    };
+    const shape = ["boombox", "carabiner", "heart"].includes(t.shell) ? t.shell : "boombox";
+    $("deckShell").dataset.shell = shape;
+    $("shellArt").src = `/assets/full_recorder_${shape}.svg`;
 
-    const startOrientation = () => {
-      window.addEventListener("deviceorientation", onOrient, { passive: true });
-    };
-
-    // iOS 13+ needs a permission gesture
-    const needsPermission =
-      typeof DeviceOrientationEvent !== "undefined" &&
-      typeof DeviceOrientationEvent.requestPermission === "function";
-
-    if (IS_EMBED) {
-      wireTouchFallback(set);
-    } else if (needsPermission) {
-      $("motionPrompt").classList.add("open");
-      $("motionAllow").addEventListener("click", async () => {
-        try {
-          const res = await DeviceOrientationEvent.requestPermission();
-          if (res === "granted") startOrientation();
-          else wireTouchFallback(set);
-        } catch { wireTouchFallback(set); }
-        $("motionPrompt").classList.remove("open");
-      }, { once: true });
-      $("motionSkip").addEventListener("click", () => {
-        wireTouchFallback(set);
-        $("motionPrompt").classList.remove("open");
-      }, { once: true });
-    } else if ("DeviceOrientationEvent" in window) {
-      startOrientation();
-    } else {
-      wireTouchFallback(set);
+    if (t.coverPhoto) {
+      const b = $("coverPhoto");
+      b.hidden = false;
+      b.style.backgroundImage = `url(${media(t.coverPhoto)})`;
+      b.addEventListener("click", () => { $("photoImg").src = media(t.coverPhoto); open("photoSheet"); });
     }
+    if (t.letter && t.letter.trim()) {
+      $("btnLetter").hidden = false;
+      $("letterHead").textContent = t.senderName ? `a note from ${t.senderName}` : "a note for you";
+      $("letterBody").textContent = t.letter;
+    }
+    if (!t.hasReply) $("btnReply").hidden = false;
+    renderSongs();
   }
-  function wireTouchFallback(set) {
-    // Drag anywhere on the scene → parallax
-    const scene = $("scene");
-    let dragging = false, sx = 0, sy = 0;
-    scene.addEventListener("touchstart", (e) => {
-      dragging = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-    }, { passive: true });
-    scene.addEventListener("touchmove", (e) => {
-      if (!dragging) return;
-      const dx = (e.touches[0].clientX - sx) / 120;
-      const dy = (e.touches[0].clientY - sy) / 120;
-      set(clamp(dx, -1, 1), clamp(dy, -1, 1));
-    }, { passive: true });
-    scene.addEventListener("touchend", () => { dragging = false; set(0, 0); });
-    // mouse for desktop preview
-    scene.addEventListener("mousemove", (e) => {
-      const r = scene.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width - 0.5) * 2;
-      const ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
-      set(nx * 0.6, ny * 0.6);
-    });
+
+  function renderSongs() {
+    const list = $("songList");
+    const tracks = tape.tracks || [];
+    $("songCount").textContent = tracks.length ? `${tracks.length} song${tracks.length === 1 ? "" : "s"}` : "";
+    if (!tracks.length) { list.innerHTML = '<li class="empty">just voice notes on this one</li>'; return; }
+    list.innerHTML = tracks.map((tr, i) => {
+      const extra = tr.memo ? '<span class="tag">🎙️ memo</span>' : tr.note ? '<span class="tag">📝 note</span>' : "";
+      const renamed = tr.original && tr.display && tr.original !== tr.display;
+      return `<li><button class="song" data-i="${i}">
+        <span class="num">${String(i + 1).padStart(2, "0")}</span>
+        <span class="meta"><span class="t">${esc(tr.display || tr.original)}</span>
+        <span class="a">${esc(renamed ? `${tr.original} · ${tr.artist || ""}` : tr.artist || "")}</span></span>
+        ${extra}<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></button></li>`;
+    }).join("");
+    list.querySelectorAll(".song").forEach((b) => b.addEventListener("click", () => {
+      if (!deck) return;
+      const i = Number(b.dataset.i);
+      if (i === deck.state.index) deck.toggle(); else deck.jump(i, true);
+    }));
   }
-  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  /* ---------- UNVEILING (tap to unwrap) ---------- */
-  function wireUnveiling() {
-    const wrap = $("unveilWrapper");
-    const veil = $("unveiling");
-    wrap.addEventListener("click", () => {
-      wrap.classList.add("opening");
-      // little rustle
-      try {
-        const a = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YT9v"); // silent stub, replaced by real asset later
-        a.volume = 0.25; a.play().catch(()=>{});
-      } catch {}
+
+  /* ---------- the gift ---------- */
+  function wireGift() {
+    const gift = $("gift");
+    gift.addEventListener("click", () => {
+      if (gift.classList.contains("opening")) return;
+      gift.classList.add("opening");
+      $("giftHint").textContent = "";
+      startDeck(); // build the players now, while this tap still counts as a "user gesture"
       setTimeout(() => {
-        veil.classList.add("hidden");
-        // If sender wrote a letter, open it first — otherwise go straight to tape
-        if (state.tape.letter && state.tape.letter.trim()) {
-          openLetter();
-        }
-      }, 900);
-    }, { once: true });
-  }
-  /* ---------- LETTER modal ---------- */
-  function wireLetter(t) {
-    const modal = $("letterModal");
-    $("letterBody").textContent = t.letter || "";
-    $("letterHeading").textContent = t.senderName
-      ? `a note from ${t.senderName}`
-      : "a note from your sender";
-    $("letterClose").addEventListener("click", closeLetter);
-    $("letterPlay").addEventListener("click", () => { closeLetter(); playToggle(true); });
-    $("letterReply").addEventListener("click", () => { closeLetter(); openReply(); });
-    // Tapping the folded letter prop reopens it
-    const prop = $("letterProp");
-    if (prop && (t.letter && t.letter.trim())) {
-      prop.addEventListener("click", openLetter);
-    } else if (prop) {
-      prop.style.display = "none";
-    }
-  }
-  function openLetter() { $("letterModal").classList.add("open"); }
-  function closeLetter() { $("letterModal").classList.remove("open"); }
-  /* ---------- PLAYER (Spotify SDK / YouTube iframe / raw audio) ---------- */
-  function wirePlayer(t) {
-    $("btnFlip").addEventListener("click", flipTape);
-    $("btnPlay").addEventListener("click", () => playToggle());
-    $("btnNext").addEventListener("click", nextTrack);
-    updateNowPlaying();
-
-    // Route by content type
-    if (t.contentType === "audio" && t.audioUrl) {
-      setupRawAudio(t.audioUrl);
-    } else if (t.playlist && t.playlist.source === "spotify" && (t.tracks || []).some(x => x.ytVideoId)) {
-      setupYouTubeVideos(t.tracks.map(x => x.ytVideoId).filter(Boolean));
-    } else if (t.playlist && t.playlist.source === "spotify") {
-      setupSpotifyLane(t.playlist);
-    } else if (t.playlist && t.playlist.source === "youtube") {
-      setupYouTubeLane(t.playlist);
-    } else {
-      // No playlist bound — memos-only tape ("just voice notes")
-      console.info("Tape has no playlist; memo-only mode");
-    }
-  }
-  function flipTape() {
-    $("cassette").classList.toggle("flipped");
-  }
-  function playToggle(forcePlay) {
-    const wantPlay = typeof forcePlay === "boolean" ? forcePlay : !state.playing;
-    state.playing = wantPlay;
-    $("cassette").classList.toggle("playing", wantPlay);
-    $("btnPlay").textContent = wantPlay ? "❚❚" : "▶";
-    if (state.audioEl) {
-      wantPlay ? state.audioEl.play().catch(()=>{}) : state.audioEl.pause();
-    }
-    if (state.spotifyPlayer && state.spotifyReady) {
-      wantPlay ? state.spotifyPlayer.resume() : state.spotifyPlayer.pause();
-    }
-    if (state.ytPlayer) {
-      wantPlay ? state.ytPlayer.playVideo && state.ytPlayer.playVideo()
-               : state.ytPlayer.pauseVideo && state.ytPlayer.pauseVideo();
-    }
-    if (wantPlay) maybePlayMemoAt("intro");
-  }
-  function nextTrack() {
-    const tracks = state.tape.tracks || [];
-    if (!tracks.length) return;
-    state.trackIdx = (state.trackIdx + 1) % tracks.length;
-    updateNowPlaying();
-    maybePlayMemoAt("intro");
-  }
-  function jumpToTrack(i) {
-    state.trackIdx = i;
-    updateNowPlaying();
-    playToggle(true);
-    // Highlight in tracklist
-    document.querySelectorAll(".tracklist-back .row").forEach((r, idx) =>
-      r.classList.toggle("now", idx === i));
-    maybePlayMemoAt("intro");
-  }
-  function updateNowPlaying() {
-    const t = state.tape;
-    const tr = (t.tracks || [])[state.trackIdx];
-    if (!tr) { $("nowPlaying").innerHTML = ""; return; }
-    $("nowPlaying").innerHTML =
-      `<div class="np-track">${escapeHtml(tr.display || tr.original || "")}</div>
-       <div class="np-original">${tr.original && tr.display && tr.original !== tr.display
-          ? "originally: " + escapeHtml(tr.original) : ""}</div>`;
-    document.querySelectorAll(".tracklist-back .row").forEach((r, idx) =>
-      r.classList.toggle("now", idx === state.trackIdx));
-  }
-
-  /* --- Lanes --- */
-  function setupRawAudio(url) {
-    const a = new Audio(url);
-    a.preload = "metadata";
-    state.audioEl = a;
-  }
-  function setupSpotifyLane(pl) {
-    // Detect Spotify Premium via SDK. Fall back to embed iframe if not premium
-    // or if the SDK never authorizes (recipient not logged in).
-    // NOTE: full OAuth flow is out of scope for v5; we render the embed iframe
-    // as the honest default and offer a "Spotify Premium? play ad-free" toggle
-    // that opens the SDK path in a follow-up build.
-    const mount = document.createElement("div");
-    mount.className = "lane-mount";
-    mount.innerHTML = `<iframe
-      style="border-radius:12px"
-      src="https://open.spotify.com/embed/playlist/${encodeURIComponent(pl.id)}?utm_source=t4tmix"
-      width="100%" height="80" frameborder="0" allowfullscreen=""
-      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-      loading="lazy"></iframe>`;
-    document.body.appendChild(mount);
-  }
-  function setupYouTubeVideos(ids) {
-    const mount = document.createElement("div");
-    mount.className = "lane-mount";
-    const first = encodeURIComponent(ids[0]);
-    const rest = ids.slice(1, 50).map(encodeURIComponent).join(",");
-    mount.innerHTML = `<iframe title="the songs on this tape"
-      src="https://www.youtube-nocookie.com/embed/${first}?playlist=${rest}&rel=0"
-      width="100%" height="80" frameborder="0"
-      allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
-    document.body.appendChild(mount);
-  }
-  function setupYouTubeLane(pl) {
-    const mount = document.createElement("div");
-    mount.className = "lane-mount";
-    mount.innerHTML = `<iframe
-      src="https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(pl.id)}"
-      width="100%" height="80" frameborder="0"
-      allow="autoplay; encrypted-media; picture-in-picture"
-      allowfullscreen loading="lazy"></iframe>`;
-    document.body.appendChild(mount);
-  }
-  /* ---------- MEMOS (voice notes at intro / outro / over-ad) ---------- */
-  function openMemo(i) {
-    const tr = state.tape.tracks[i];
-    if (!tr) return;
-    if (tr.memo) {
-      state.memoAudio.src = mediaUrl(tr.memo);
-      state.memoAudio.play().catch(()=>{});
-    } else if (tr.note) {
-      // Text-only memo: pop as a floating note over the tape
-      const div = document.createElement("div");
-      div.className = "memo-note glow";
-      div.style.cssText = "position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) rotate(-2deg);z-index:20;max-width:70%;padding:12px 14px;font-size:14px;";
-      div.textContent = tr.note;
-      div.addEventListener("click", () => div.remove());
-      $("playerShell").appendChild(div);
-      setTimeout(() => div.remove(), 6000);
-    }
-  }
-  function maybePlayMemoAt(position) {
-    const tr = state.tape.tracks[state.trackIdx];
-    if (!tr) return;
-    if (tr.memoPosition === position && tr.memo) {
-      state.memoAudio.src = mediaUrl(tr.memo);
-      state.memoAudio.play().catch(()=>{});
-    }
-  }
-  /* ---------- REPLY (one per tape: voice or text) ---------- */
-  function wireReply(t) {
-    if (t.hasReply) {
-      $("btnReply").classList.add("hidden");
-    } else {
-      $("btnReply").classList.remove("hidden");
-      $("btnReply").addEventListener("click", openReply);
-    }
-
-    // Tabs
-    document.querySelectorAll(".reply-tab").forEach(tab => {
-      tab.addEventListener("click", () => {
-        document.querySelectorAll(".reply-tab").forEach(x => x.classList.remove("active"));
-        document.querySelectorAll(".reply-pane").forEach(x => x.classList.remove("active"));
-        tab.classList.add("active");
-        document.querySelector(`.reply-pane[data-pane="${tab.dataset.tab}"]`).classList.add("active");
-        updateReplySendEnabled();
-      });
+        $("giftStage").classList.add("gone-up");
+        $("room").hidden = false;
+        requestAnimationFrame(() => $("room").classList.add("in"));
+        setTimeout(() => { $("giftStage").hidden = true; }, 900);
+        if (tape.letter && tape.letter.trim()) setTimeout(() => open("letterSheet"), 650);
+      }, 1500);
     });
+    gift.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); gift.click(); } });
+  }
 
-    // Text
+  /* ---------- the deck ---------- */
+  function startDeck() {
+    if (deck) return;
+    const tracks = (tape.tracks || []).map((t) => ({ ...t, memoUrl: media(t.memo) }));
+    deck = new window.T4TDeck({
+      mount: $("deckMount"),
+      tracks,
+      source: (tape.playlist && tape.playlist.source) || "spotify",
+      onChange: render,
+    });
+    renderLanes();
+    $("btnPlay").addEventListener("click", () => deck.toggle());
+    $("btnNext").addEventListener("click", () => deck.next());
+    $("btnPrev").addEventListener("click", () => deck.prev());
+    render({ ...deck.state, track: deck.current(), lanes: deck.lanes });
+    if (deck.state.lane) deck.slot(deck.state.lane); // show the provider player right away
+  }
+
+  function renderLanes() {
+    const box = $("laneSwitch");
+    if (deck.lanes.length < 2) { box.hidden = true; return; }
+    box.innerHTML = deck.lanes.map((l) => `<button role="tab" data-lane="${l}">${LANE_NAMES[l]}</button>`).join("");
+    box.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { deck.setLane(b.dataset.lane); deck.slot(b.dataset.lane); }));
+  }
+
+  function render(s) {
+    const t = s.track;
+    const room = $("room");
+    room.classList.toggle("is-playing", !!s.playing && !s.memo);
+    room.classList.toggle("is-loading", !!s.loading);
+    room.classList.toggle("is-memo", !!s.memo);
+    $("btnPlay").setAttribute("aria-label", s.playing ? "pause" : "play");
+    $("nowKicker").textContent = s.memo ? "🎙️ a voice memo first…" : `track ${s.index + 1} of ${(tape.tracks || []).length}`;
+    $("nowSong").textContent = t ? (t.display || t.original) : "no songs on this tape";
+    $("nowArtist").textContent = t ? (t.artist || "") : "";
+    const renamed = t && t.original && t.display && t.original !== t.display;
+    $("nowOriginal").hidden = !renamed;
+    if (renamed) $("nowOriginal").textContent = `originally “${t.original}”`;
+    $("nowNote").hidden = !(t && t.note);
+    if (t && t.note) $("nowNote").textContent = `“${t.note}”`;
+    $("deckMsg").textContent = s.message || "";
+    $("deckMsg").classList.toggle("nudge", !!s.needsTap);
+    $("deckFine").textContent = s.lane ? LANE_FINE[s.lane] : "";
+    $("laneSwitch").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.lane === s.lane));
+    document.querySelectorAll("#songList .song").forEach((b, i) => {
+      b.classList.toggle("now", i === s.index);
+      b.classList.toggle("live", i === s.index && !!s.playing);
+    });
+    if (s.needsTap) $("deckMount").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  /* ---------- sheets ---------- */
+  function open(id) { const n = $(id); n.hidden = false; requestAnimationFrame(() => n.classList.add("open")); }
+  function close(n) { n.classList.remove("open"); setTimeout(() => { n.hidden = true; }, 250); }
+  function wireSheets() {
+    document.querySelectorAll(".sheet").forEach((sh) => {
+      sh.addEventListener("click", (e) => { if (e.target === sh || e.target.closest("[data-close]")) close(sh); });
+    });
+    $("btnLetter").addEventListener("click", () => open("letterSheet"));
+    $("letterPlay").addEventListener("click", () => { close($("letterSheet")); if (deck && !deck.state.playing) deck.play(); });
+    $("btnWhat").addEventListener("click", () => open("whatSheet"));
+    $("btnReply").addEventListener("click", () => open("replySheet"));
+  }
+
+  /* ---------- reply (one per tape) ---------- */
+  let payload = null, rec = null;
+  function wireReply() {
+    document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === tab));
+      document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("on", p.dataset.pane === tab.dataset.tab));
+    }));
     $("replyText").addEventListener("input", () => {
       const v = $("replyText").value.trim();
-      if (v) state.replyPayload = { kind: "text", text: v };
-      else state.replyPayload = null;
-      updateReplySendEnabled();
+      payload = v ? { kind: "text", text: v } : (payload && payload.kind === "voice" ? payload : null);
+      $("replySend").disabled = !payload;
     });
-
-    // Voice
-    $("recBtn").addEventListener("click", toggleRecording);
+    $("recBtn").addEventListener("click", toggleRec);
     $("replySend").addEventListener("click", sendReply);
   }
-  function openReply() { $("replyModal").classList.add("open"); }
-  function closeReply() { $("replyModal").classList.remove("open"); }
-  function updateReplySendEnabled() {
-    $("replySend").disabled = !state.replyPayload;
-  }
-
-  async function toggleRecording() {
-    if (state.recording && state.recording.recorder && state.recording.recorder.state === "recording") {
-      state.recording.recorder.stop();
-      return;
-    }
+  async function toggleRec() {
+    if (rec && rec.r.state === "recording") { rec.r.stop(); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : (MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "");
-      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      const chunks = [];
-      recorder.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
-      recorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: mime || "audio/webm" });
-        state.recording.blob = blob;
-        state.recording.url = URL.createObjectURL(blob);
-        const el = $("recPlayback");
-        el.src = state.recording.url;
-        el.style.display = "block";
-        $("recBtn").classList.remove("recording");
-        $("recBtn").textContent = "●";
-        state.replyPayload = { kind: "voice", blob, mime: mime || "audio/webm" };
-        updateReplySendEnabled();
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+      const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks = []; let s = 0;
+      r.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+      r.onstop = () => {
+        clearInterval(rec.iv); stream.getTracks().forEach((x) => x.stop());
+        const type = (r.mimeType || mime || "audio/webm").split(";")[0];
+        const blob = new Blob(chunks, { type });
+        $("recPlayback").src = URL.createObjectURL(blob); $("recPlayback").hidden = false;
+        $("recBtn").classList.remove("on"); $("recBtn").textContent = "●";
+        payload = { kind: "voice", blob, type }; $("replySend").disabled = false;
       };
-      state.recording = { recorder, chunks, blob: null, url: null, seconds: 0 };
-      recorder.start();
-      $("recBtn").classList.add("recording");
-      $("recBtn").textContent = "■";
-      startRecTimer();
-    } catch (err) {
-      alert("mic permission denied. try the text tab instead.");
-    }
+      rec = { r, iv: setInterval(() => { s++; $("recTimer").textContent = `0:${String(s).padStart(2, "0")} / 0:20`; if (s >= 20) r.stop(); }, 1000) };
+      r.start(); $("recBtn").classList.add("on"); $("recBtn").textContent = "■";
+    } catch (e) { $("recTimer").textContent = "mic is blocked — try writing instead"; }
   }
-  function startRecTimer() {
-    const MAX = 20;
-    let s = 0;
-    const iv = setInterval(() => {
-      if (!state.recording || !state.recording.recorder ||
-          state.recording.recorder.state !== "recording") {
-        clearInterval(iv); return;
-      }
-      s += 1;
-      state.recording.seconds = s;
-      $("recTimer").textContent = `0:${String(s).padStart(2,"0")} / 0:20`;
-      if (s >= MAX) {
-        try { state.recording.recorder.stop(); } catch {}
-        clearInterval(iv);
-      }
-    }, 1000);
-  }
-
   async function sendReply() {
-    if (!state.replyPayload) return;
-    const btn = $("replySend");
-    btn.disabled = true; btn.textContent = "sending…";
+    if (!payload) return;
+    const btn = $("replySend"); btn.disabled = true; btn.textContent = "sending…";
     try {
       const fd = new FormData();
-      fd.append("kind", state.replyPayload.kind);
-      if (state.replyPayload.kind === "text") {
-        fd.append("text", state.replyPayload.text);
-      } else {
-        const ext = (state.replyPayload.mime || "").includes("mp4") ? "mp4" : "webm";
-        fd.append("audio", state.replyPayload.blob, `reply.${ext}`);
-      }
+      fd.append("kind", payload.kind);
+      fd.append("from", $("replyFrom").value.trim());
+      if (payload.kind === "text") fd.append("text", payload.text);
+      else fd.append("audio", payload.blob, `reply.${payload.type.includes("mp4") ? "mp4" : "webm"}`);
       const r = await fetch(`/api/tape/${TAPE_ID}/reply`, { method: "POST", body: fd });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error || "send failed");
-      }
-      // Success state
-      $("replyCard").style.display = "none";
-      $("replySuccess").classList.remove("hidden");
-      $("btnReply").classList.add("hidden");
-      setTimeout(closeReply, 2200);
-    } catch (err) {
-      alert(err && err.message ? err.message : "couldn't send. try again in a moment.");
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "couldn't send");
+      $("replyForm").hidden = true; $("replyDone").hidden = false; $("btnReply").hidden = true;
+      setTimeout(() => close($("replySheet")), 2200);
+    } catch (e) {
       btn.disabled = false; btn.textContent = "send it";
+      $("recTimer").textContent = e.message || "couldn't send — try again";
+      alert(e.message || "couldn't send — try again in a moment");
     }
-  }
-  /* ---------- WHAT'S THIS? ---------- */
-  function wireWhatsThis() {
-    $("whatsThisBtn").addEventListener("click", () => $("whatsThisModal").classList.add("open"));
-    $("wtClose").addEventListener("click", () => $("whatsThisModal").classList.remove("open"));
   }
 
   document.addEventListener("DOMContentLoaded", boot);

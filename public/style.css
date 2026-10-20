@@ -24,27 +24,6 @@
   --shell-body:#2b2036;
 }
 
-/* ============ T4T Mix v3 — the tape IS the canvas ============ */
-:root{
-  --trans-1:#5BCEFA; --trans-2:#F5A9B8; --trans-3:#FFFFFF;
-  --les-1:#D62900; --les-2:#FF9B55; --les-4:#D462A6; --les-5:#A50062;
-  --bi-1:#D60270; --bi-2:#9B4F96; --bi-3:#0038A8;
-  --nb-1:#FCF434; --nb-3:#9C59D1; --nb-4:#2C2C2C;
-  --pride-1:#E70000; --pride-2:#FF8C00; --pride-3:#FFEF00; --pride-4:#00811F; --pride-5:#0044FF; --pride-6:#760089;
-  --ink:#2b2036; --card:#ffffff; --shadow:0 10px 30px rgba(43,32,54,0.12); --radius:20px;
-  --shell-body:#2b2036;
-}
-
-/* ============ T4T Mix v3 — the tape IS the canvas ============ */
-:root{
-  --trans-1:#5BCEFA; --trans-2:#F5A9B8; --trans-3:#FFFFFF;
-  --les-1:#D62900; --les-2:#FF9B55; --les-4:#D462A6; --les-5:#A50062;
-  --bi-1:#D60270; --bi-2:#9B4F96; --bi-3:#0038A8;
-  --nb-1:#FCF434; --nb-3:#9C59D1; --nb-4:#2C2C2C;
-  --pride-1:#E70000; --pride-2:#FF8C00; --pride-3:#FFEF00; --pride-4:#00811F; --pride-5:#0044FF; --pride-6:#760089;
-  --ink:#2b2036; --card:#ffffff; --shadow:0 10px 30px rgba(43,32,54,0.12); --radius:20px;
-  --shell-body:#2b2036;
-}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:linear-gradient(180deg,#fff8fb 0%,#f3f7ff 100%); color:var(--ink); min-height:100vh; overflow-x:hidden; position:relative; }
@@ -55,7 +34,6 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .screen{ display:none; max-width:520px; margin:0 auto; padding:24px 18px 60px; min-height:100vh; }
 .screen.active{ display:block; animation:fadein .4s ease; }
 @keyframes fadein{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
-.visually-hidden-embed{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
 
 /* hero */
 .topbadge{ text-align:center; font-size:12.5px; color:#7a6b8a; background:rgba(255,255,255,0.7); border-radius:999px; padding:6px 14px; width:fit-content; margin:0 auto 22px; box-shadow:var(--shadow); }
@@ -103,10 +81,7 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 
 /* ================= CASSETTE (the actual object) ================= */
 .cassette-stage{ display:flex; justify-content:center; margin:6px 0 20px; perspective:1400px; }
-.cassette-flipper{ position:relative; width:320px; height:210px; transform-style:preserve-3d; transition:transform .7s cubic-bezier(.4,.2,.2,1); }
-.cassette-flipper.flipped{ transform:rotateY(180deg); }
 .cassette-face{ position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; }
-.cassette-back{ transform:rotateY(180deg); }
 
 .cassette-body{
   position:relative; width:100%; height:100%; border-radius:14px;
@@ -114,7 +89,6 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
   box-shadow:0 18px 36px rgba(43,32,54,0.28), inset 0 2px 0 rgba(255,255,255,0.4);
   padding:14px; overflow:visible;
 }
-.back-body{ background: var(--tape-shell, linear-gradient(160deg,#efe6de,#ded1c4)); }
 .cassette-screw{ position:absolute; width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #9d9098 70%); box-shadow:inset 0 0 0 1px rgba(0,0,0,0.25); z-index:5; }
 .cassette-screw.tl{ top:8px; left:8px; } .cassette-screw.tr{ top:8px; right:8px; }
 .cassette-screw.bl{ bottom:8px; left:8px; } .cassette-screw.br{ bottom:8px; right:8px; }
@@ -131,8 +105,6 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
   background-image: repeating-linear-gradient(to bottom, transparent, transparent 20px, rgba(120,100,90,0.18) 20px, rgba(120,100,90,0.18) 21px);
   pointer-events:none; }
 .label-side-tag{ position:absolute; top:6px; right:10px; font-size:8.5px; font-weight:800; letter-spacing:1px; color:#a3762f; background:rgba(255,255,255,0.6); padding:1px 6px; border-radius:4px; }
-.side-b-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
-.preview-play-btn{ border:none; background:rgba(163,118,47,0.15); width:26px; height:26px; border-radius:50%; font-size:11px; cursor:pointer; flex-shrink:0; }
 .handwritten-title{
   font-family:'T4TKalam', cursive; font-size:26px; line-height:1.15; color:#2b2036;
   padding:6px 2px 0; outline:none; cursor:text; min-height:34px; word-break:break-word;
@@ -164,60 +136,10 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 
 .cassette-teeth{ height:6px; margin-top:8px; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.15) 0 4px, transparent 4px 9px); border-radius:3px; opacity:0.6; }
 
-.sticker-layer{ position:absolute; inset:0; pointer-events:none; z-index:6; }
-.sticker-layer .placed-sticker{ position:absolute; font-size:24px; cursor:pointer; user-select:none; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.25)); pointer-events:auto; }
-
-.flip-btn{
-  position:absolute; bottom:-38px; right:0; background:#fff; border:2px solid #eadff0; border-radius:999px;
-  padding:6px 14px; font-size:11.5px; font-weight:800; color:#7a6b8a; cursor:pointer; display:flex; align-items:center; gap:5px; box-shadow:var(--shadow);
-}
-.flip-btn span{ font-size:11px; }
-
-/* back label / tracklist */
-/* v5.1 Patch B (fixed) — Side B scroll + tap fix WITHOUT breaking the 3D flip.
-   Prior version added transform:translateZ(0) which stacked on top of the
-   parent .cassette-back rotateY(180deg) and re-mirrored the text + stole
-   pointer events. Use `isolation`+`contain` for the compositor hint instead;
-   both create a paint/stacking boundary without introducing a new transform. */
-.back-label{ position:relative; background:var(--label-paper, #fbf6ea); border:1px solid rgba(0,0,0,0.08); border-radius:6px; height:210px; margin-top:2px; padding:22px 12px 10px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.08); overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y; isolation:isolate; contain:paint; pointer-events:auto; }
-.back-tracklist{ font-family:'T4TKalam', cursive; font-size:14.5px; line-height:1.6; color:#2b2036; min-height:100%; padding-bottom:8px; pointer-events:auto; }
-/* v5 Patch A — bigger touch target + tap feedback so the row FEELS tappable */
-.back-tracklist .btk-row{ padding:8px 6px; border-radius:8px; transition:background .2s ease; cursor:pointer; min-height:40px; pointer-events:auto; }
-.back-tracklist .btk-row:active{ background:rgba(255,182,193,0.25); }
-.back-tracklist .btk-row-main{ display:flex; gap:8px; align-items:center; }
-.back-tracklist .btk-row.now-playing{ background:rgba(255,182,193,0.35); box-shadow:inset 0 0 0 2px rgba(255,105,135,0.5); }
-.back-tracklist .btk-row.now-playing .btk-num::before{ content:"🔊 "; }
-.back-tracklist .btk-num{ font-size:12px; color:#a3762f; flex-shrink:0; width:22px; }
-.back-tracklist .btk-title{ flex:1; cursor:pointer; border-bottom:1px dashed transparent; }
-.back-tracklist .btk-title:hover{ border-bottom-color:#a3762f; }
-.back-tracklist .btk-title.editing{ outline:none; border-bottom:1px dashed #a3762f; }
-.back-tracklist .btk-artist{ font-size:10.5px; color:#9c86ad; font-family:'Segoe UI',sans-serif; }
-/* memo icon: made deliberately LOUD (not faded) — pink gradient + glow the moment a note or voice memo exists,
-   soft outline/pulse when empty so it still reads as tappable rather than decorative */
-.back-tracklist .btk-memo-dot{
-  font-size:16px; opacity:1; flex-shrink:0; cursor:pointer;
-  width:34px; height:30px; display:flex; align-items:center; justify-content:center;
-  border-radius:10px; background:rgba(163,118,47,0.16); box-shadow:inset 0 0 0 1.5px rgba(163,118,47,0.35);
-  transition:transform .15s ease, box-shadow .15s ease;
-}
-.back-tracklist .btk-memo-dot.has-memo{
-  background:linear-gradient(135deg,#ff8fab,#ffd6e0); box-shadow:0 3px 8px rgba(255,105,135,0.55), inset 0 0 0 1.5px rgba(255,255,255,0.6);
-  transform:scale(1.05);
-}
-.back-tracklist .btk-memo-dot:hover{ transform:scale(1.12); }
-.back-tracklist .btk-memo-dot:active{ transform:scale(0.9); }
-.back-tracklist .btk-note-preview{
-  font-family:'T4TKalam', cursive; font-size:12.5px; color:#a3762f; background:rgba(255,182,193,0.18);
-  border-left:3px solid #ff8fab; padding:2px 8px; margin:1px 0 4px 24px; border-radius:0 8px 8px 0;
-  white-space:normal; word-break:break-word;
-}
-
 /* panels */
 .panel{ background:var(--card); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:18px; }
 .panel-title{ font-weight:800; font-size:15px; margin-bottom:12px; }
 .panel-hint{ font-size:11.5px; color:#a698b3; margin-top:10px; }
-.sticker-tray{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-.sticker-item{ width:44px; height:44px; display:flex; align-items:center; justify-content:center; font-size:24px; background:#faf5fb; border-radius:12px; cursor:grab; border:2px dashed #eadff0; }
 .photo-upload-btn{ display:inline-block; background:#faf5fb; border:2px dashed #eadff0; border-radius:12px; padding:10px 14px; font-size:13px; cursor:pointer; font-weight:700; color:#5c4d6b; }
 
 /* letter flap */
@@ -308,26 +230,7 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 
 /* the interactive title text + reels are the ONLY thing app.js swaps per
    track/skin now — the tape body itself is baked into the shell art, so
-   there's no separate .mini-tape rendered on top of these three shapes
-   (kept below, still used for any future "floating tape" preview needs) */
-.mini-tape{ width:92px; height:58px; background:var(--tape-shell, linear-gradient(160deg,#efe6de,#ded1c4)); border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.15), 0 3px 6px rgba(0,0,0,0.3); padding:4px; gap:2px; }
-.mini-tape-label{ font-family:'T4TKalam', cursive; font-size:10px; font-weight:700; color:#2b2036; background:var(--label-paper,#fbf6ea); padding:2px 6px; border-radius:3px; max-width:80px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.mini-tape-reels{ display:flex; gap:8px; }
-.mini-tape-reels .mini-reel{ width:12px; height:12px; border-radius:50%; background:#8b7f73; box-shadow:0 0 0 1px rgba(0,0,0,0.3); }
-
-.shell-photo-wrap{ position:absolute; inset:0; border-radius:inherit; background-size:cover; background-position:center; opacity:0; pointer-events:none; z-index:0; }
-.shell-photo-wrap.active.fullbody{ opacity:0.85; mix-blend-mode:multiply; }
-.shell-photo-wrap.active.framed{ opacity:0; }
-.shell-photo-frame{ position:absolute; top:8px; right:8px; width:44px; height:44px; border-radius:8px; overflow:hidden; border:3px solid #fff; box-shadow:0 3px 8px rgba(0,0,0,0.3); z-index:3; display:none; }
-.shell-photo-frame.active{ display:block; }
-.shell-photo-frame img{ width:100%; height:100%; object-fit:cover; }
-
-.shell-sticker-layer{ position:absolute; inset:0; z-index:4; pointer-events:none; }
-.shell-sticker-layer .placed-sticker{ pointer-events:auto; }
-
-.eq-bars{ position:absolute; bottom:-2px; left:50%; transform:translateX(-50%); display:flex; gap:3px; align-items:flex-end; height:16px; opacity:0; transition:opacity .3s; }
-.eq-bars.playing{ opacity:1; }
-.eq-bars span{ width:4px; background:#fff; border-radius:2px; animation:eq 0.8s ease-in-out infinite alternate; }
+   there's no separate .eq-bars span{ width:4px; background:#fff; border-radius:2px; animation:eq 0.8s ease-in-out infinite alternate; }
 .eq-bars span:nth-child(1){ height:6px; animation-delay:0s; }
 .eq-bars span:nth-child(2){ height:14px; animation-delay:.1s; }
 .eq-bars span:nth-child(3){ height:9px; animation-delay:.2s; }
@@ -341,24 +244,11 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .tctrl.big{ width:62px; height:62px; background:linear-gradient(135deg,var(--trans-1),var(--trans-2)); font-size:22px; }
 
 /* now-playing card: pops in fully opaque (no fade-in) each time the track changes */
-.now-playing-card{
-  margin-top:18px; max-width:320px; width:100%; background:#fff; border-radius:18px; padding:14px 18px;
-  box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px; text-align:center;
-  border:2px solid rgba(255,143,171,0.4);
-}
-.now-playing-card.note-pop{ animation:npPop .35s cubic-bezier(.34,1.56,.64,1); }
 @keyframes npPop{ 0%{ transform:scale(0.92); } 55%{ transform:scale(1.04); } 100%{ transform:scale(1); } }
 .np-label{ font-size:11px; font-weight:800; letter-spacing:1px; color:#ff6f91; text-transform:uppercase; }
 .np-track{ font-weight:800; font-size:15.5px; color:var(--ink); }
 .np-artist{ font-size:11.5px; color:#9c86ad; margin-bottom:2px; }
 .np-note{ font-family:'T4TKalam', cursive; font-size:14px; color:#a3762f; background:rgba(255,182,193,0.25); border-radius:10px; padding:6px 10px; }
-.np-voice-btn{ margin-top:6px; border:none; background:linear-gradient(135deg,#ff8fab,#ffd6e0); color:#2b2036; font-weight:700; font-size:12px; padding:8px 14px; border-radius:999px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; justify-content:center; align-self:center; box-shadow:0 3px 8px rgba(255,105,135,0.4); }
-.np-voice-btn:active{ transform:scale(0.95); }
-.preview-play-btn:active{ transform:scale(0.9); }
-
-.wrap-style-picker{ display:flex; gap:10px; margin-bottom:14px; }
-.wrap-btn{ flex:1; padding:10px; border-radius:12px; border:2px solid #eadff0; background:#faf5fb; font-size:12.5px; font-weight:700; color:#7a6b8a; cursor:pointer; }
-.wrap-btn.active{ border-color:var(--trans-1); color:var(--ink); background:#eaf7ff; }
 
 /* send screen */
 .send-heading{ text-align:center; font-size:22px; margin:18px 0 4px; }
@@ -381,7 +271,7 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .btn-record.recording{ background:#ff4d6d; color:#fff; }
 #record-timer{ font-size:13px; color:#7a6b8a; font-weight:700; }
 
-@media (max-width:380px){ .wordmark{ font-size:36px; } .shell-boombox{ width:260px; } .cassette-flipper{ width:290px; } }
+@media (max-width:380px){ .wordmark{ font-size:36px; } .shell-boombox{ width:260px; }  }
 
 /* ===================== merged from style_v4_patch.css (v4) ===================== */
 /* ============================================================
@@ -422,172 +312,11 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .cassette-engraving:focus { outline: none; background: rgba(255,255,255,0.3); color: #2b2036; }
 .cassette-engraving.has-value { color: #3d2820; font-weight: 600; }
 
-/* ---------- Placed stickers: draggable / resizable / removable ---------- */
-.placed-sticker {
-  position: absolute;
-  width: 44px; height: 44px;
-  font-size: 30px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: grab;
-  transform: translate(-50%, -50%);
-  user-select: none;
-  touch-action: none;
-  transition: box-shadow 0.15s;
-  border-radius: 8px;
-  z-index: 5;
-}
-.placed-sticker:active { cursor: grabbing; }
-.placed-sticker.selected {
-  outline: 2px dashed rgba(255,255,255,0.9);
-  outline-offset: 3px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-}
-.placed-sticker svg { width: 100%; height: 100%; }
-.placed-sticker .sticker-handle {
-  position: absolute;
-  bottom: -6px; right: -6px;
-  width: 14px; height: 14px;
-  background: #fff; border: 1.5px solid #7a5aa8;
-  border-radius: 50%;
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity 0.15s;
-  z-index: 6;
-}
-.placed-sticker:hover .sticker-handle,
-.placed-sticker.selected .sticker-handle { opacity: 1; }
-
-/* Top-surgery-scars SVG sticker */
-.scar-sticker { padding: 4px; }
-
-/* ---------- Track title as real <input> (kills duplicate-line bug) ---------- */
-.btk-title-input {
-  font: inherit;
-  border: none;
-  background: transparent;
-  padding: 2px 4px;
-  min-width: 40px;
-  max-width: 60%;
-  border-bottom: 1px dashed transparent;
-  transition: border-color 0.2s, background 0.2s;
-  color: inherit;
-}
-.btk-title-input:hover { border-bottom-color: rgba(122, 90, 168, 0.4); }
-.btk-title-input:focus {
-  outline: none;
-  border-bottom-color: #7a5aa8;
-  background: rgba(255, 255, 255, 0.4);
-}
-.btk-original-preview {
-  font-size: 11px; color: #7a6a8a; font-style: italic;
-  padding-left: 26px; margin-top: 2px;
-}
-
 /* ---------- Now-playing card: original title line ---------- */
 .np-original {
   font-size: 12px; color: #8a7fa0;
   font-style: italic;
   margin-top: -2px; margin-bottom: 6px;
-}
-
-/* ---------- YouTube audio host (hidden but present) ---------- */
-.yt-audio-host {
-  position: absolute;
-  width: 1px; height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-  top: 0; left: 0;
-}
-
-/* ---------- Ad-cover overlay: cassette hiss + voice memo cover ---------- */
-.ad-cover {
-  position: absolute;
-  inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at center, rgba(43, 32, 54, 0.4) 0%, rgba(43, 32, 54, 0.7) 100%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s;
-  z-index: 20;
-  border-radius: inherit;
-}
-.ad-cover.active { opacity: 1; }
-.ad-cover-hiss {
-  position: absolute; inset: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(255,255,255,0.02) 0px,
-    rgba(255,255,255,0.06) 2px,
-    rgba(0,0,0,0.02) 3px,
-    rgba(255,255,255,0.04) 5px
-  );
-  mix-blend-mode: overlay;
-  animation: hiss-shimmer 0.14s steps(2) infinite;
-}
-@keyframes hiss-shimmer {
-  0% { transform: translate(0,0); }
-  50% { transform: translate(1px,-1px); }
-  100% { transform: translate(-1px,1px); }
-}
-.ad-cover-label {
-  position: relative;
-  color: #fdf6ec;
-  font-family: "Courier New", monospace;
-  font-size: 14px;
-  letter-spacing: 2px;
-  text-shadow: 0 2px 6px rgba(0,0,0,0.5);
-  padding: 12px 20px;
-  background: rgba(0,0,0,0.35);
-  border-radius: 24px;
-  border: 1px solid rgba(255,255,255,0.15);
-  animation: hiss-pulse 1.2s ease-in-out infinite;
-}
-@keyframes hiss-pulse {
-  0%,100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-}
-
-/* ---------- Wrap style: layer the frame ON TOP of the full-body wrap ---------- */
-.shell-photo-wrap {
-  position: absolute; inset: 0;
-  background-size: cover; background-position: center;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.3s;
-  z-index: 1;
-}
-.shell-photo-wrap.active { opacity: 1; }
-.shell-photo-wrap.active.fullbody { opacity: 0.92; }
-
-/* Frame sits above the wrap so both can coexist (state.shellWrapStyle === "both") */
-.shell-photo-frame {
-  position: absolute;
-  top: 12%; left: 12%;
-  width: 76%; height: 40%;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 3px solid rgba(255,255,255,0.85);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-  display: none;
-  z-index: 3;
-}
-.shell-photo-frame.active { display: block; }
-.shell-photo-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-/* Wrap-style picker gets a third button */
-.wrap-btn {
-  padding: 8px 12px; font-size: 12px;
-  border: 1.5px solid #b7a7c9;
-  background: rgba(255,255,255,0.5);
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.18s;
-  color: #2b2036;
-}
-.wrap-btn.active {
-  background: #7a5aa8; color: #fff;
-  border-color: #7a5aa8;
 }
 
 /* ---------- Voice modal: memo positioning + rename ---------- */
@@ -596,25 +325,6 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
   border: 1px solid #b7a7c9; border-radius: 8px;
   background: #fff; font-size: 12px; color: #2b2036;
 }
-#track-rename-input {
-  width: 100%; padding: 8px 10px;
-  border: 1px dashed #b7a7c9; border-radius: 8px;
-  font-size: 14px; margin-bottom: 8px;
-  background: rgba(255,255,255,0.6);
-}
-#track-rename-input:focus { outline: none; border-color: #7a5aa8; background: #fff; }
-
-/* Ensure the sticker layer sits above the cassette art so drag/drop hit-tests correctly */
-.sticker-layer,
-.shell-sticker-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: auto;
-}
-
-/* Prevent drag ghost from disappearing under other elements */
-.sticker-item:active { cursor: grabbing; }
 
 /* ===================== v0.6 send screen (2026-10-20) ===================== */
 .send-form, .send-done { max-width: 420px; margin: 14px auto 0; }
@@ -637,12 +347,71 @@ body{ font-family:'Segoe UI',system-ui,-apple-system,sans-serif; background:line
 .sent-reply { grid-column: 1 / -1; font-size: 13px; opacity: .85; }
 .sent-reply audio { height: 32px; vertical-align: middle; max-width: 100%; }
 
-/* v0.6 FIX — "can't tap songs on Side B": the front face's sticker layer
-   (pointer-events:auto, from the v4 patch) kept catching taps after the flip,
-   because a 3D-hidden face is still hit-testable in some browsers.
-   Only the face you can see takes taps. */
-.cassette-flipper.flipped .cassette-front,
-.cassette-flipper.flipped .cassette-front * { pointer-events: none !important; }
-.cassette-flipper:not(.flipped) .cassette-back,
-.cassette-flipper:not(.flipped) .cassette-back * { pointer-events: none !important; }
-.cassette-flipper.flipped .cassette-back { z-index: 2; }
+
+/* ===================== v0.7 tape screen (2026-10-20) ===================== */
+html{ --pen:#241a33; --paper-line:rgba(120,100,90,.18); }
+html[data-ink="midnight"]{ --pen:#241a33; } html[data-ink="berry"]{ --pen:#a3204f; }
+html[data-ink="ocean"]{ --pen:#1d4f8f; } html[data-ink="forest"]{ --pen:#2f5d3a; } html[data-ink="plum"]{ --pen:#5b2a86; }
+html[data-paper="kraft"]{ --label-paper:#e9d6b4 !important; --paper-line:rgba(90,60,30,.2); }
+html[data-paper="grid"]{ --label-paper:#f7f9fc !important; --paper-line:rgba(60,110,170,.18); }
+html[data-paper="blush"]{ --label-paper:#fde8ee !important; --paper-line:rgba(160,70,100,.16); }
+#cassette-front{ width:min(340px, 92vw); height:auto; aspect-ratio:auto; }
+.cassette-label{ background:var(--label-paper,#fbf6ea); }
+.label-lines{ background-image:repeating-linear-gradient(to bottom, transparent, transparent 20px, var(--paper-line) 20px, var(--paper-line) 21px); }
+html[data-paper="grid"] .label-lines{ background-image:linear-gradient(var(--paper-line) 1px, transparent 1px), linear-gradient(90deg, var(--paper-line) 1px, transparent 1px); background-size:14px 14px; }
+.handwritten-title, .jsong .t, .shell-art-overlay-title{ color:var(--pen); }
+.shell-art-overlay-title{ text-shadow:none; background:var(--label-paper,#fbf6ea); border-radius:3px; }
+.cassette-photo-slot{ background-color:rgba(255,255,255,.55); }
+.cassette-photo-slot.has-photo .cassette-photo-placeholder{ display:none; }
+
+.style-panel{ max-width:420px; margin:0 auto 18px; display:grid; gap:12px; }
+.style-row{ display:grid; grid-template-columns:52px 1fr; align-items:center; gap:10px; }
+.style-label{ font-size:12px; font-weight:800; color:#9c86ad; text-transform:uppercase; letter-spacing:1px; }
+.skin-picker, .ink-picker{ display:flex; gap:10px; flex-wrap:wrap; }
+.paper-picker{ display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+.skin-swatch{ padding:0; transition:transform .15s; }
+.ink-dot{ width:28px; height:28px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 0 1.5px rgba(43,32,54,.15); cursor:pointer; padding:0; transition:transform .15s; }
+.ink-dot.active{ box-shadow:0 0 0 2.5px #2b2036; transform:scale(1.12); }
+.ink-dot[data-ink="midnight"]{ background:#241a33; } .ink-dot[data-ink="berry"]{ background:#a3204f; }
+.ink-dot[data-ink="ocean"]{ background:#1d4f8f; } .ink-dot[data-ink="forest"]{ background:#2f5d3a; } .ink-dot[data-ink="plum"]{ background:#5b2a86; }
+.paper-chip{ padding:7px 4px; text-align:center; border-radius:10px; border:2px solid transparent; font-family:'T4TKalam', cursive; font-size:14px; color:#4a3d58; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+.paper-chip[data-paper="cream"]{ background:#fbf6ea; } .paper-chip[data-paper="kraft"]{ background:#e9d6b4; }
+.paper-chip[data-paper="grid"]{ background:#f7f9fc linear-gradient(rgba(60,110,170,.16) 1px, transparent 1px) 0 0/8px 8px; } .paper-chip[data-paper="blush"]{ background:#fde8ee; }
+.paper-chip.active{ border-color:#2b2036; }
+
+/* J-card: full-width song list with room for long names */
+.jcard{ max-width:420px; margin:0 auto 18px; background:var(--label-paper,#fbf6ea); border-radius:16px; box-shadow:var(--shadow); padding:14px 14px 8px; position:relative; }
+.jcard::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:8px; border-radius:16px 0 0 16px; background:var(--tape-shell, #e9dfd4); }
+.jcard-head{ display:flex; align-items:center; justify-content:space-between; font-family:'T4TKalam', cursive; font-size:20px; color:var(--pen); padding-left:6px; }
+.jcard-play{ border:none; border-radius:999px; padding:7px 14px; font-weight:800; font-size:13px; color:#fff; background:linear-gradient(135deg,var(--trans-1),var(--trans-2)); cursor:pointer; }
+.jcard-hint{ font-size:11.5px; color:#9c86ad; margin:2px 0 6px 6px; }
+.jcard-list{ list-style:none; margin:0; padding:0 0 0 6px; }
+.jcard-list li + li{ border-top:1px dashed var(--paper-line); }
+.jsong{ width:100%; display:grid; grid-template-columns:26px 1fr 34px; gap:8px; align-items:center; text-align:left; background:none; border:none; padding:10px 0; cursor:pointer; font:inherit; color:inherit; border-radius:8px; }
+.jsong:active{ background:rgba(0,0,0,.04); }
+.jsong .num{ font-size:11px; font-weight:800; color:#8f7f70; font-variant-numeric:tabular-nums; }
+.jsong .meta{ display:flex; flex-direction:column; min-width:0; }
+.jsong .t{ font-family:'T4TKalam', cursive; font-size:17px; line-height:1.2; overflow-wrap:anywhere; }
+.jsong .a{ font-size:12px; color:#6f6385; overflow-wrap:anywhere; }
+.jsong .n{ font-family:'T4TKalam', cursive; font-size:13px; color:#a3762f; margin-top:2px; }
+.jsong .add{ width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-size:14px; border:1.5px dashed #d8c7e3; color:#a698b3; }
+.jsong .add.has{ border:none; background:linear-gradient(135deg,#ffd1e3,#ffe9c2); box-shadow:0 0 10px rgba(255,111,145,.35); }
+.jsong.now .t{ color:#e63a7a; }
+.jsong.now .num{ color:#e63a7a; }
+
+/* player screen */
+.shell-option img{ width:58px; height:52px; object-fit:contain; }
+.np-mini{ text-align:center; margin-top:6px; min-height:40px; max-width:320px; }
+.np-mini .np-track{ overflow-wrap:anywhere; }
+.deck-msg{ min-height:1.2em; font-size:12.5px; color:#7a6b8a; text-align:center; max-width:340px; margin:10px auto 0; }
+.deck-msg.nudge{ color:#e63a7a; font-weight:700; }
+.sender-deck{ width:min(420px, 100%); margin-top:10px; display:grid; gap:8px; justify-items:center; }
+.sender-deck .lane-switch{ display:inline-flex; padding:3px; border-radius:999px; background:#fff; box-shadow:var(--shadow); }
+.sender-deck .lane-switch:empty{ display:none; }
+.sender-deck .lane-switch button{ border:none; background:none; padding:6px 12px; border-radius:999px; font-size:13px; color:#7a6b8a; cursor:pointer; }
+.sender-deck .lane-switch button.on{ background:#2b2036; color:#fff; font-weight:700; }
+.sender-deck .deck-mount{ width:100%; border-radius:12px; overflow:hidden; }
+.deck-slot iframe{ display:block; width:100%; border:0; }
+.deck-slot[data-lane="youtube"] iframe{ height:200px; }
+.deck-slot[data-lane="spotify"] iframe{ height:152px; }
+.deck-slot[data-lane="preview"]{ display:none; }

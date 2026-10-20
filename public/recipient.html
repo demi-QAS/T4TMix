@@ -2,171 +2,167 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
-<meta name="theme-color" content="#05010b" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#120a1c" />
 <title>T4T Mix — a mixtape for you</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>@font-face{font-family:"Kalam";src:url("/fonts/Kalam-Regular.ttf") format("truetype");font-weight:400;font-display:swap}@font-face{font-family:"Kalam";src:url("/fonts/Kalam-Bold.ttf") format("truetype");font-weight:700;font-display:swap}</style>
 <link rel="stylesheet" href="/recipient.css" />
 <link rel="icon" href="/assets/full_recorder_boombox.png" />
 </head>
 <body>
 
-<!-- Motion permission prompt (iOS 13+ requires user gesture) -->
-<div class="motion-prompt" id="motionPrompt">
-  <div class="mp-icon">📱</div>
-  <div class="mp-title">tilt to see inside</div>
-  <div class="mp-body">this mixtape has a little world around it. tap yes to let the room breathe when you move your phone.</div>
-  <button class="mp-btn" id="motionAllow">yes, let it breathe</button>
-  <div class="mp-skip" id="motionSkip">no thanks, just play the tape</div>
-</div>
+<!-- ============ THE GIFT ============ -->
+<section class="gift-stage" id="giftStage" aria-label="a wrapped mixtape">
+  <div class="gift-glow" aria-hidden="true"></div>
+  <div class="gift-sparkles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <p class="gift-from" id="giftFrom">someone made you something</p>
 
-<!-- Unveiling: wrapper you tap to open -->
-<div class="unveiling" id="unveiling">
-  <div class="unveil-from" id="unveilFrom">from someone</div>
-  <div class="unveil-wrapper" id="unveilWrapper">
-    <div class="unveil-for" id="unveilFor">for you</div>
-  </div>
-  <div class="unveil-tap">tap to unwrap</div>
-  <div class="unveil-preamble">a T4T Mix</div>
-</div>
+  <button class="gift" id="gift" aria-label="tap to unwrap">
+    <span class="gift-shadow" aria-hidden="true"></span>
+    <span class="gift-box" aria-hidden="true">
+      <span class="gift-ribbon-v"></span>
+    </span>
+    <span class="gift-lid" aria-hidden="true">
+      <span class="gift-ribbon-v"></span>
+      <span class="gift-bow"><span class="loop l"></span><span class="loop r"></span><span class="knot"></span><span class="tail l"></span><span class="tail r"></span></span>
+    </span>
+    <span class="gift-tag" aria-hidden="true">
+      <span class="tag-hole"></span>
+      <span class="tag-text" id="giftFor">for you</span>
+    </span>
+    <span class="gift-tape" aria-hidden="true"><span class="mini-reel"></span><span class="mini-reel"></span></span>
+  </button>
 
-<!-- The scene: everything parallaxes off this -->
-<main class="scene" id="scene" data-scene="desk" style="--tx:0;--ty:0;">
+  <p class="gift-hint" id="giftHint">tap to unwrap</p>
+  <p class="gift-brand">a T4T Mix</p>
+</section>
 
-  <div class="whats-this-chip" id="whatsThisBtn">what's this?</div>
+<!-- ============ THE TAPE (after unwrapping) ============ -->
+<main class="room" id="room" hidden>
+  <header class="room-head">
+    <p class="room-fromto" id="fromTo"></p>
+    <h1 class="room-title" id="tapeTitle">a mix for you</h1>
+  </header>
 
-  <!-- Layer: WALL -->
-  <div class="layer layer-wall">
-    <div class="bg-wall"></div>
-    <div class="bg-window"></div>
-    <div class="bg-poster"></div>
-    <div class="bg-photo-strip">
-      <div class="ps-cell"></div><div class="ps-cell"></div>
-      <div class="ps-cell"></div><div class="ps-cell"></div>
+  <div class="deck-shell" id="deckShell">
+    <div class="shell-stage" id="shellStage">
+      <img class="shell-art" id="shellArt" alt="" draggable="false" />
+      <div class="shell-title" id="shellTitle"></div>
+      <div class="shell-reel left"><span></span></div>
+      <div class="shell-reel right"><span></span></div>
     </div>
+    <button class="cover-photo" id="coverPhoto" hidden aria-label="see the photo"></button>
   </div>
 
-  <!-- Layer: FURNITURE -->
-  <div class="layer layer-furniture">
-    <div class="bg-desk"></div>
-    <div class="bg-dashboard"></div>
-    <div class="prop-rain"></div>
+  <section class="now" aria-live="polite">
+    <p class="now-kicker" id="nowKicker">side A · track 1</p>
+    <h2 class="now-song" id="nowSong">—</h2>
+    <p class="now-artist" id="nowArtist"></p>
+    <p class="now-original" id="nowOriginal" hidden></p>
+    <p class="now-note" id="nowNote" hidden></p>
+  </section>
+
+  <div class="transport">
+    <button class="t-btn" id="btnPrev" aria-label="previous song">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+    </button>
+    <button class="t-btn t-play" id="btnPlay" aria-label="play">
+      <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z"/></svg>
+      <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      <span class="spinner" aria-hidden="true"></span>
+    </button>
+    <button class="t-btn" id="btnNext" aria-label="next song">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
+    </button>
   </div>
 
-  <!-- Layer: PROPS -->
-  <div class="layer layer-props">
-    <div class="prop-lamp"></div>
-    <div class="prop-books"></div>
-    <div class="prop-mug"></div>
-    <div class="prop-letter-folded" id="letterProp"></div>
-  </div>
+  <p class="deck-msg" id="deckMsg" role="status"></p>
 
-  <!-- Layer: PLAYER (the tape itself, foreground) -->
-  <div class="layer layer-player">
-    <div class="player-mount">
-      <div class="player-shell" id="playerShell">
-        <div class="tape-slot">
-          <div class="cassette" id="cassette">
-            <div class="cassette-face front">
-              <div class="cassette-title" id="tapeTitleFront">a mix for you</div>
-              <div class="cassette-photo" id="tapePhoto"></div>
-              <div class="cassette-window">
-                <div class="reel"></div>
-                <div class="reel"></div>
-              </div>
-            </div>
-            <div class="cassette-face back">
-              <div class="tracklist-back" id="tracklistBack"></div>
-            </div>
-          </div>
-        </div>
-        <div class="memo-notes" id="memoNotes"></div>
-        <div class="now-playing" id="nowPlaying">
-          <div class="np-track">—</div>
-          <div class="np-original"></div>
-        </div>
-        <div class="tape-controls">
-          <button class="tctrl" id="btnFlip" aria-label="flip tape">↺</button>
-          <button class="tctrl big" id="btnPlay" aria-label="play/pause">▶</button>
-          <button class="tctrl" id="btnNext" aria-label="next">⏭</button>
-        </div>
-        <button class="tctrl reply-envelope hidden" id="btnReply" aria-label="write a reply">✉︎</button>
-      </div>
+  <section class="deck-card">
+    <div class="deck-card-head">
+      <span class="deck-label">the tape deck</span>
+      <div class="lane-switch" id="laneSwitch" role="tablist" aria-label="where the songs play"></div>
     </div>
+    <div class="deck-mount" id="deckMount"></div>
+    <p class="deck-fine" id="deckFine"></p>
+  </section>
+
+  <div class="room-actions">
+    <button class="pill" id="btnLetter" hidden>💌 their letter</button>
+    <button class="pill pill-hot" id="btnReply" hidden>✍️ write back</button>
   </div>
 
+  <section class="jcard" aria-label="the songs">
+    <div class="jcard-head"><span>the songs</span><span id="songCount"></span></div>
+    <ol class="jcard-list" id="songList"></ol>
+  </section>
+
+  <footer class="room-foot">
+    <button class="link" id="btnWhat">what's a T4T Mix?</button>
+    <a class="link" href="/" target="_blank" rel="noopener">make one →</a>
+  </footer>
 </main>
 
-<!-- LETTER MODAL -->
-<div class="letter-modal" id="letterModal">
-  <div class="letter-card">
-    <button class="letter-close" id="letterClose">×</button>
-    <div class="letter-heading" id="letterHeading">a note from your sender</div>
+<!-- ============ LETTER ============ -->
+<div class="sheet" id="letterSheet" hidden>
+  <div class="sheet-card letter-card">
+    <button class="sheet-x" data-close aria-label="close">×</button>
+    <p class="letter-head" id="letterHead">a note for you</p>
     <div class="letter-body" id="letterBody"></div>
-    <div class="letter-actions">
-      <button id="letterReply">write back</button>
-      <button class="secondary" id="letterPlay">play the tape</button>
-    </div>
+    <button class="btn" id="letterPlay">▶ play the tape</button>
   </div>
 </div>
 
-<!-- PHOTO ZOOM -->
-<div class="photo-zoom" id="photoZoom">
-  <button class="photo-zoom-close" id="photoZoomClose">×</button>
-  <img id="photoZoomImg" alt="cover photo" />
+<!-- ============ PHOTO ============ -->
+<div class="sheet photo-sheet" id="photoSheet" hidden>
+  <button class="sheet-x" data-close aria-label="close">×</button>
+  <img id="photoImg" alt="the photo on the tape" />
 </div>
 
-<!-- REPLY MODAL -->
-<div class="reply-modal" id="replyModal">
-  <div class="reply-card" id="replyCard">
-    <div class="reply-title">write back</div>
-    <div class="reply-sub">one reply per tape — make it count</div>
-    <div class="reply-tabs">
-      <button class="reply-tab active" data-tab="voice">🎙️ voice</button>
-      <button class="reply-tab" data-tab="text">📝 text</button>
-    </div>
-
-    <div class="reply-pane active" data-pane="voice">
-      <div class="reply-record">
-        <button class="rec-btn" id="recBtn">●</button>
-        <div class="rec-timer" id="recTimer">0:00 / 0:20</div>
-        <div class="rec-hint">up to 20s</div>
+<!-- ============ REPLY ============ -->
+<div class="sheet" id="replySheet" hidden>
+  <div class="sheet-card">
+    <button class="sheet-x" data-close aria-label="close">×</button>
+    <div id="replyForm">
+      <p class="sheet-title">write back</p>
+      <p class="sheet-sub">one reply per tape — make it count</p>
+      <div class="tabs">
+        <button class="tab on" data-tab="text">📝 write</button>
+        <button class="tab" data-tab="voice">🎙️ say it</button>
       </div>
-      <audio id="recPlayback" controls style="width:100%;display:none;margin-bottom:10px;"></audio>
+      <div class="pane on" data-pane="text">
+        <textarea id="replyText" maxlength="500" placeholder="what did the tape make you feel?"></textarea>
+      </div>
+      <div class="pane" data-pane="voice">
+        <div class="rec">
+          <button class="rec-btn" id="recBtn" aria-label="record">●</button>
+          <span id="recTimer">0:00 / 0:20</span>
+        </div>
+        <audio id="recPlayback" controls hidden></audio>
+      </div>
+      <input id="replyFrom" maxlength="40" placeholder="your name (optional)" />
+      <button class="btn" id="replySend" disabled>send it</button>
+      <p class="sheet-fine">goes only to whoever made this tape</p>
     </div>
-
-    <div class="reply-pane" data-pane="text">
-      <textarea class="reply-textarea" id="replyText" placeholder="what did the tape make you feel?"></textarea>
+    <div id="replyDone" class="reply-done" hidden>
+      <p class="big">💌</p><p class="sheet-title">sent</p><p class="sheet-sub">they'll see it next time they check.</p>
     </div>
-
-    <button class="reply-send" id="replySend" disabled>send it</button>
-    <div class="reply-note">goes straight to whoever made this tape · one reply, then it closes</div>
-  </div>
-  <div class="reply-success hidden" id="replySuccess">
-    <div class="rs-icon">💌</div>
-    <div class="rs-title">sent</div>
-    <div class="rs-sub">they'll get it in a moment.</div>
   </div>
 </div>
 
-<!-- WHAT'S THIS? -->
-<div class="whats-this-modal" id="whatsThisModal">
-  <div class="wt-card">
-    <button class="wt-close" id="wtClose">×</button>
-    <h3>this is a T4T Mix</h3>
-    <p>someone made you a mixtape. tap the wrapper to open it. tilt your phone — the room moves. flip the tape to see the tracklist. yellow sticky notes are voice memos from your sender.</p>
-    <p>the songs stream from Spotify or YouTube (your sender picked). the memos and their note to you live here.</p>
-    <p style="opacity:.7;font-size:12px;">made by <strong>Queer Accounting Solutions</strong>. no ads, no algorithm, no gatekeeping.</p>
-    <a class="wt-cta" href="https://t4tmix.com" target="_blank" rel="noopener">make one yourself →</a>
+<!-- ============ WHAT'S THIS ============ -->
+<div class="sheet" id="whatSheet" hidden>
+  <div class="sheet-card">
+    <button class="sheet-x" data-close aria-label="close">×</button>
+    <p class="sheet-title">this is a T4T Mix</p>
+    <p class="sheet-p">someone made you a mixtape. press play — the songs stream from Spotify or YouTube, and any voice memos and letters come from the person who made it.</p>
+    <p class="sheet-p">on Spotify you hear full songs if you're logged in to Spotify in this browser, 30-second previews if not. YouTube plays full songs but may show ads.</p>
+    <p class="sheet-fine">made by Queer Accounting Solutions · no algorithm, no gatekeeping</p>
   </div>
 </div>
 
-<!-- Server injects the tape ID here -->
 <script>window.__TAPE_ID__ = "__TAPE_ID__"; window.__T4T_EMBED__ = "__EMBED__";</script>
-<!-- Spotify Web Playback SDK (loads lazily only if premium detected) -->
+<script src="/player.js" defer></script>
 <script src="/recipient.js" defer></script>
 </body>
 </html>

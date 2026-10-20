@@ -16,7 +16,9 @@ What was wrong in `main`, and what was done about it.
 | 10 | Fonts base64-embedded in a 1.2 MB CSS file; duplicate art files in the root | Slow load, confusing repo | Fixed |
 
 ## Still open
-- Recipient Play/Next buttons don't control the Spotify or YouTube iframe players (those players have their own controls).
+- ~~Recipient Play/Next didn't control the players~~ — fixed in 0.7.
+- On phones, the browser sometimes won't let our button start the embedded player; the page then asks for one tap on the player itself. Test on a real iPhone and Android.
+- YouTube quota: each new song match costs 100 of the 10,000 daily units (about 100 new songs a day). Matches are cached, so repeated songs are free. Ask Google for more quota if it's popular.
 - The freemium counter and Stripe aren't wired up.
 - Not yet tested on real Cloudflare (KV/R2 creation, secrets). Run `npm test` against prod after deploying.
 - The Spotify embed fallback is unofficial and could break.

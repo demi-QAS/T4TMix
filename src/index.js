@@ -26,6 +26,8 @@ const SKINS = ["trans", "lesbian", "bi", "nb", "pride"];
 const SHELLS = ["boombox", "carabiner", "heart"];
 const SCENES = ["desk", "nightstand", "car"];
 const MEMO_POSITIONS = ["intro", "outro", "over-ad"];
+const INKS = ["midnight", "berry", "ocean", "forest", "plum"];
+const PAPERS = ["cream", "kraft", "grid", "blush"];
 
 function randomString(len, alphabet) {
   const bytes = new Uint8Array(len);
@@ -135,7 +137,7 @@ async function spotifyViaApi(id, env) {
     for (const it of d.items || []) {
       const t = it.item || it.track; // Feb 2026 renamed track → item
       if (!t || !t.name) continue;
-      tracks.push({ title: t.name, artist: (t.artists || []).map((a) => a.name).join(", "), durationMs: t.duration_ms || null });
+      tracks.push({ title: t.name, artist: (t.artists || []).map((a) => a.name).join(", "), durationMs: t.duration_ms || null, spotifyId: t.id || null, previewUrl: t.preview_url || null });
     }
     next = d.next || null;
   }
@@ -154,7 +156,8 @@ async function spotifyViaEmbed(id) {
   try {
     const ent = JSON.parse(m[1]).props.pageProps.state.data.entity;
     const tracks = (ent.trackList || []).map((t) => ({
-      title: t.title, artist: t.subtitle || "", durationMs: t.duration || null,
+      title: t.title, artist: (t.subtitle || "").replace(/\u00a0/g, " "), durationMs: t.duration || null,
+      spotifyId: ((t.uri || "").match(/^spotify:track:([a-zA-Z0-9]{22})$/) || [])[1] || null,
       previewUrl: (t.audioPreview && t.audioPreview.url) || null,
     }));
     return { title: ent.name || ent.title || "", tracks, via: "spotify-embed" };
@@ -188,18 +191,33 @@ async function youtubePlaylist(listId, env) {
   return { title, tracks, via: "youtube-api" };
 }
 
+// Spotify song -> YouTube video, looked up only when someone actually plays it.
+// search.list costs 100 of the 10,000 daily quota units, so results are kept in KV
+// for 30 days (misses for 1 day) and shared by every tape that uses the same song.
 async function resolveYouTubeId(title, artist, env) {
-  if (!env.YOUTUBE_API_KEY) return null;
-  const cacheReq = new Request(`https://cache.t4tmix.internal/yt/${encodeURIComponent(`${title}|${artist}`.toLowerCase())}`);
-  const hit = await caches.default.match(cacheReq);
-  if (hit) return (await hit.text()) || null;
-  const q = encodeURIComponent(`${title} ${artist}`);
-  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&videoEmbeddable=true&q=${q}&key=${encodeURIComponent(env.YOUTUBE_API_KEY)}`);
-  if (!r.ok) return null; // quota exhausted etc. — don't cache failures
+  if (!env.YOUTUBE_API_KEY || !title) return null;
+  const key = `yt:${`${title}|${artist}`.toLowerCase().slice(0, 300)}`;
+  if (env.TAPES) {
+    const hit = await env.TAPES.get(key);
+    if (hit !== null) return hit || null;
+  }
+  const q = encodeURIComponent(`${title} ${artist} audio`.trim());
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&videoEmbeddable=true&videoCategoryId=10&q=${q}&key=${encodeURIComponent(env.YOUTUBE_API_KEY)}`);
+  if (!r.ok) return null; // quota used up etc. — don't remember failures
   const d = await r.json();
-  const vid = d.items && d.items[0] && d.items[0].id ? d.items[0].id.videoId : "";
-  await caches.default.put(cacheReq, new Response(vid || "", { headers: { "cache-control": "max-age=2592000" } }));
+  const vid = d.items && d.items[0] && d.items[0].id ? d.items[0].id.videoId || "" : "";
+  if (env.TAPES) await env.TAPES.put(key, vid, { expirationTtl: vid ? 60 * 60 * 24 * 30 : 60 * 60 * 24 });
   return vid || null;
+}
+
+async function handleMatch(req, env) {
+  if (await rateLimited(req, "match", 120, 600)) return err("slow down a little 💌", 429);
+  const sp = new URL(req.url).searchParams;
+  const title = str(sp.get("title"), 160), artist = str(sp.get("artist"), 160);
+  if (!title) return err("title is required");
+  if (!env.YOUTUBE_API_KEY) return j({ ok: true, videoId: null, reason: "youtube-off" });
+  const videoId = await resolveYouTubeId(title, artist, env).catch(() => null);
+  return j({ ok: true, videoId }, 200, { "cache-control": "public, max-age=3600" });
 }
 
 async function handlePlaylist(req, env, { bridge }) {
@@ -224,7 +242,7 @@ async function handlePlaylist(req, env, { bridge }) {
   if (!d || !d.tracks.length) return err("couldn't read that playlist — is it public?", 404);
 
   if (bridge && env.YOUTUBE_API_KEY) {
-    const cap = Number(env.MAX_BRIDGE_TRACKS || 50); // ~100 quota units per fresh track
+    const cap = Math.min(Number(env.MAX_BRIDGE_TRACKS || 10), 10); // legacy route; songs now match lazily via /api/match
     const list = d.tracks.slice(0, cap);
     for (let i = 0; i < list.length; i += 5) {
       const ids = await Promise.all(list.slice(i, i + 5).map((t) => resolveYouTubeId(t.title, t.artist, env).catch(() => null)));
@@ -248,13 +266,6 @@ const MEDIA_FILE = /^(memo-\d{1,3}\.(webm|ogg|mp4|m4a)|(cover|shell|window)\.(jp
 const AUDIO_EXT = { "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "mp4", "audio/x-m4a": "m4a", "audio/aac": "m4a" };
 const IMAGE_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
 
-function sanitizeSticker(s) {
-  return {
-    emoji: str(s && s.emoji, 16),
-    x: num(s && s.x, 0, 100, 50), y: num(s && s.y, 0, 100, 50),
-    size: num(s && s.size, 16, 160, 44), rotation: num(s && s.rotation, -180, 180, 0),
-  };
-}
 function sanitizeTape(b) {
   const pl = b.playlist || {};
   const source = oneOf(pl.source, ["spotify", "youtube"], null);
@@ -272,9 +283,11 @@ function sanitizeTape(b) {
       artist: str(t.artist, 160), note: str(t.note, 600),
       memoPosition: oneOf(t.memoPosition, MEMO_POSITIONS, "intro"),
       ytVideoId: /^[a-zA-Z0-9_-]{11}$/.test(t.ytVideoId || "") ? t.ytVideoId : null,
+      spotifyId: /^[a-zA-Z0-9]{22}$/.test(t.spotifyId || "") ? t.spotifyId : null,
+      previewUrl: /^https:\/\/p\.scdn\.co\/mp3-preview\/[a-f0-9]{20,64}$/.test(t.previewUrl || "") ? t.previewUrl : null,
     })),
-    stickersFront: (Array.isArray(b.stickersFront) ? b.stickersFront : []).slice(0, 40).map(sanitizeSticker),
-    stickersShell: (Array.isArray(b.stickersShell) ? b.stickersShell : []).slice(0, 40).map(sanitizeSticker),
+    ink: oneOf(b.ink, INKS, "midnight"),
+    paper: oneOf(b.paper, PAPERS, "cream"),
     skin: oneOf(b.skin, SKINS, "trans"),
     shell: oneOf(b.shell, SHELLS, "boombox"),
     wrapStyle: oneOf(b.wrapStyle, ["fullbody", "framed", "both"], "fullbody"),
@@ -482,7 +495,7 @@ export default {
     let m;
     try {
       if (p === "/api/health")
-        return j({ ok: true, version: "0.6.0", features: {
+        return j({ ok: true, version: "0.7.0", features: {
           storage: !!(env.TAPES && env.MEDIA),
           spotifyApi: !!(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
           youtube: !!env.YOUTUBE_API_KEY,
@@ -490,6 +503,7 @@ export default {
         } });
       if (p === "/api/playlist" && M === "GET") return handlePlaylist(req, env, { bridge: false });
       if (p === "/api/bridge" && M === "GET") return handlePlaylist(req, env, { bridge: true });
+      if (p === "/api/match" && M === "GET") return handleMatch(req, env);
       if (p === "/api/tape" && M === "POST") return saveTape(req, env);
       if ((m = p.match(/^\/api\/tape\/([a-z2-9]{6,16})$/)) && M === "GET") {
         const t = await loadTape(env, m[1]);

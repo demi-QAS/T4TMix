@@ -1,14 +1,6 @@
-// ============ T4T Mix v4 — the tape IS the canvas ============
-// v4 changes (from v3):
-//   1. Real YouTube IFrame audio lane (video-search fallback if playlist ID missing)
-//   2. Ad-cover cassette-hiss overlay on track transitions (ToS-compliant: we don't touch YT volume)
-//   3. Draggable / resizable / removable placed stickers (kept editable after drop)
-//   4. Track title edit uses a real <input>, kills the duplicate-line contentEditable bug
-//   5. Track renames stored separately from the original ({display, original}); original surfaces on player card
-//   6. Sticker state persists across nav (localStorage + rehydrate on show)
-//   7. Voice-memo positioning: intro / outro / over-ad
-//   8. Engraving field (baked spine text) tracked in state
-//   9. Wrap-style adds a "both" mode + separate window-photo upload
+// ============ T4T Mix v0.7 — the tape, the player, send ============
+// One shared player (player.js / T4TDeck) drives Spotify, YouTube and previews from OUR buttons.
+// Stickers are gone; the tape is personalised with skin, pen colour, paper, title, engraving and a photo.
 
 // ---------- FALLBACK DATA ----------
 const FALLBACK_TRACKS = [
@@ -40,7 +32,7 @@ const SKIN_GRADIENTS = {
   pride:  { shell:"linear-gradient(160deg,#ede4d4,#d6c9e0)", label:"#fdf8ea", tag:"#4a2e6a", spine:"linear-gradient(180deg,#E70000,#0044FF)", shellPlayer:"linear-gradient(160deg,#E70000,#FF8C00,#FFEF00,#00811F,#0044FF,#760089)", shellFlat:"#760089", qr:"#760089" }
 };
 
-const STORAGE_KEY = "t4tmix.state.v4";
+const STORAGE_KEY = "t4tmix.state.v7";
 
 // ---------- STATE ----------
 // Every track carries { display, original } — display is what the recipient sees; original stays
@@ -48,17 +40,13 @@ const STORAGE_KEY = "t4tmix.state.v4";
 const state = {
   source: "spotify", playlistUrl: "", playlistId: "", playlistTitle: "",
   tapeTitle: "a mix for you", engraving: "", skin: "trans",
-  tracks: [], coverPhoto: null, coverStickers: [],
+  tracks: [], coverPhoto: null, ink: "midnight", paper: "cream",
   letterText: "",
-  shellShape: "boombox", shellPhoto: null, shellWindowPhoto: null,
-  shellWrapStyle: "fullbody", shellStickers: [],
+  shellShape: "boombox",
   activeTrackIndex: null, mediaRecorder: null, recordedChunks: [], recordTimerInterval: null,
   isPlaying: false, mixtapesSentThisMonth: 1,
   currentTrackIndex: 0, playbackTimer: null,
-  // YouTube lane
-  ytPlayer: null, ytReady: false, ytVideoIds: [], ytPlaylistId: "",
-  // Ad-cover
-  adCoverActive: false
+  ytPlaylistId: ""
 };
 
 // ---------- HELPERS ----------
@@ -75,16 +63,15 @@ function saveState(){
   try {
     const clean = { ...state };
     // strip runtime handles that can't be JSON'd
-    delete clean.ytPlayer; delete clean.mediaRecorder; delete clean.recordedChunks;
+    delete clean.mediaRecorder; delete clean.recordedChunks;
     delete clean.playbackTimer; delete clean.recordTimerInterval;
-    delete clean.coverPhoto; delete clean.shellPhoto; delete clean.shellWindowPhoto;
-    delete clean.ytReady; delete clean.isPlaying; delete clean.adCoverActive;
+    delete clean.coverPhoto; delete clean.isPlaying;
     clean.tracks = (clean.tracks || []).map(t => ({ ...t, voiceMemoUrl: null }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
   } catch(e){ /* private mode etc. */ }
   try {
     localStorage.setItem(LS_PHOTOS, JSON.stringify({
-      coverPhoto: state.coverPhoto, shellPhoto: state.shellPhoto, shellWindowPhoto: state.shellWindowPhoto
+      coverPhoto: state.coverPhoto
     }));
   } catch(e){ /* photo too big for storage — it still works this session */ }
 }
@@ -94,7 +81,7 @@ function loadState(){
     if (!raw) return;
     const saved = JSON.parse(raw);
     Object.assign(state, saved);
-    state.isPlaying = false; state.ytReady = false;
+    state.isPlaying = false;
     (state.tracks || []).forEach(t => { t.voiceMemoUrl = null; }); // old blob: links are dead after reload
   } catch(e){}
   try { Object.assign(state, JSON.parse(localStorage.getItem(LS_PHOTOS) || "{}")); } catch(e){}
@@ -117,9 +104,7 @@ function showScreen(id){
     });
   }
   window.scrollTo({top:0, behavior:"smooth"});
-  // rehydrate whichever sticker layer just came into view
-  if (id === "screen-tape") rehydrateStickers("front-sticker-layer", state.coverStickers);
-  if (id === "screen-player") rehydrateStickers("shell-sticker-layer", state.shellStickers);
+  if (id !== "screen-player" && deck) deck.pause();
 }
 
 // ---------- LOAD PLAYLIST ----------
@@ -142,7 +127,6 @@ async function loadPlaylist(){
       if (resp.ok && data.tracks && data.tracks.length){
         state.playlistTitle = data.title || state.playlistTitle;
         state.tracks = data.tracks.map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro", ytVideoId:t.ytVideoId || null }));
-        state.ytVideoIds = state.tracks.map(t => t.ytVideoId).filter(Boolean);
         ok = true;
       }
     } catch(e){ /* fall through */ }
@@ -158,23 +142,18 @@ async function loadPlaylist(){
     state.playlistUrl = spotifyUrl; state.playlistId = id || "";
     if (id){
       try {
-        statusEl.textContent = "resolving Spotify tracks → YouTube (this takes a few seconds for a fresh playlist)…";
-        const resp = await fetch(`${API_BASE}/api/bridge?url=${encodeURIComponent(spotifyUrl)}`);
+        statusEl.textContent = "reading your Spotify playlist…";
+        const resp = await fetch(`${API_BASE}/api/playlist?url=${encodeURIComponent(spotifyUrl)}`);
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || data.error || !(data.tracks || []).length) throw new Error(data.error || "worker not ready");
         state.playlistTitle = data.title || data.name || FALLBACK_PLAYLIST_TITLE;
         state.tracks = (data.tracks || []).map(t => ({
           display: t.title, original: t.title, artist: t.artist,
           note: "", voiceMemoUrl: null, memoPosition: "intro",
-          ytVideoId: t.ytVideoId || null,
+          ytVideoId: t.ytVideoId || null, spotifyId: t.spotifyId || null,
           previewUrl: t.previewUrl || t.preview_url || null
         }));
-        state.ytVideoIds = state.tracks.map(t => t.ytVideoId).filter(Boolean);
-        const resolved = state.ytVideoIds.length;
-        const total = state.tracks.length;
-        statusEl.textContent = data.bridged
-          ? `loaded ✓ ${resolved}/${total} songs found on YouTube` + (resolved < total ? " (the rest play through Spotify)" : "")
-          : `loaded ✓ ${total} songs — they'll play through Spotify`;
+        statusEl.textContent = `loaded ✓ ${state.tracks.length} songs`;
       } catch(e){
         useFallbackTracks(statusEl);
         statusEl.textContent = "couldn't read that playlist (is it public?) — using sample songs so you can still play.";
@@ -186,6 +165,7 @@ async function loadPlaylist(){
   }
 
   memoBlobs.clear();
+  if (deck){ deck.destroy(); deck = null; }
   el("handwritten-title").textContent = state.tapeTitle;
   buildTapeScreen();
   showScreen("screen-tape");
@@ -200,74 +180,33 @@ function useFallbackTracks(statusEl){
 // ---------- TAPE SCREEN ----------
 function buildTapeScreen(){
   el("playlist-title-display").textContent = state.playlistTitle;
-  // hidden Spotify embed kept for legacy fallback, but not the audio source anymore
-  const embedWrap = el("source-embed-wrap");
-  embedWrap.innerHTML = "";
-  if (state.source === "spotify" && state.playlistId){
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://open.spotify.com/embed/playlist/${state.playlistId}`;
-    iframe.width = "1"; iframe.height = "1"; iframe.frameBorder = "0";
-    iframe.style.border = "0";
-    iframe.title = "Spotify playlist";
-    iframe.allow = "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
-    iframe.loading = "lazy";
-    embedWrap.appendChild(iframe);
-  }
   renderBackTracklist();
-  applySkin(state.skin);
+  applySkin(state.skin); applyInk(state.ink); applyPaper(state.paper);
   updateLetterTabState();
-  // engraving
   const eng = el("cassette-engraving");
   if (state.engraving){ eng.textContent = state.engraving; eng.classList.add("has-value"); }
-  rehydrateStickers("front-sticker-layer", state.coverStickers);
+  const slot = el("cassette-photo-slot");
+  if (state.coverPhoto){ slot.style.backgroundImage = `url(${state.coverPhoto})`; slot.classList.add("has-photo"); }
 }
 
-// ---------- BACK TRACKLIST (Side B) ----------
-// v5 fix (Patch A): the whole row taps into the voice/note modal (which owns
-// rename + note + memo + record). No inline input — that was eating the tap
-// on mobile and hiding the modal behind a tiny ✏️ icon.
+// ---------- THE J-CARD (every song, full width) ----------
 function renderBackTracklist(){
   const wrap = el("back-tracklist");
   wrap.innerHTML = "";
+  const now = deck ? deck.state.index : -1;
   state.tracks.forEach((t, i) => {
-    const row = document.createElement("div");
-    const isNowPlaying = state.isPlaying && i === state.currentTrackIndex;
-    row.className = "btk-row" + (isNowPlaying ? " now-playing" : "");
-    const hasMemo = !!(t.voiceMemoUrl || t.note);
-    const icon = t.voiceMemoUrl ? "🎙️" : (t.note ? "📝" : "＋");
+    const li = document.createElement("li");
     const renamed = t.display && t.display !== t.original;
-    row.innerHTML = `
-      <div class="btk-row-main">
-        <span class="btk-num">${i+1}.</span>
-        <span class="btk-title">${escapeHtml(t.display)}</span>
-        <span class="btk-artist"> — ${escapeHtml(t.artist)}</span>
-        <span class="btk-memo-dot ${hasMemo ? 'has-memo' : ''}" title="add a note or voice memo">${icon}</span>
-      </div>
-      ${renamed ? `<div class="btk-original-preview">originally: ${escapeHtml(t.original)}</div>` : ""}
-      ${t.note ? `<div class="btk-note-preview">📝 &ldquo;${escapeHtml(t.note)}&rdquo;</div>` : ""}
-    `;
-    // Whole row → modal (mobile-friendly hit target)
-    row.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openVoiceModal(i);
-    });
-    wrap.appendChild(row);
-    if (isNowPlaying){ row.scrollIntoView({ block:"nearest", behavior:"smooth" }); }
+    const icon = t.voiceMemoUrl ? "🎙️" : (t.note ? "📝" : "＋");
+    li.innerHTML = `<button class="jsong${i === now ? " now" : ""}" data-i="${i}">
+      <span class="num">${String(i+1).padStart(2,"0")}</span>
+      <span class="meta"><span class="t">${escapeHtml(t.display)}</span>
+      <span class="a">${escapeHtml(renamed ? `${t.original} · ${t.artist || ""}` : (t.artist || ""))}</span>
+      ${t.note ? `<span class="n">“${escapeHtml(t.note)}”</span>` : ""}</span>
+      <span class="add${(t.voiceMemoUrl || t.note) ? " has" : ""}" aria-hidden="true">${icon}</span></button>`;
+    li.querySelector("button").addEventListener("click", () => openVoiceModal(i));
+    wrap.appendChild(li);
   });
-  // v5 fix (Patch B belt-and-suspenders): arm the scroll surface after each
-  // render so iOS Safari doesn't drop touch-scroll inside the 3D-transformed
-  // parent. Idempotent — safe to call every render.
-  armBackScroll();
-}
-
-// v5 scroll unlock — some iOS Safari versions need an explicit touchstart to
-// arm the scroll surface inside a 3D-transformed parent. Called from
-// renderBackTracklist() so it re-arms after every re-render.
-function armBackScroll(){
-  const wrap = el("back-label") || document.querySelector(".back-label");
-  if (!wrap || wrap.__armed) return;
-  wrap.__armed = true;
-  wrap.addEventListener("touchstart", () => {}, { passive: true });
 }
 
 function applySkin(skinKey){
@@ -281,125 +220,20 @@ function applySkin(skinKey){
   root.setProperty("--qr-border", g.qr);
   qsa(".label-side-tag").forEach(t => t.style.color = g.tag);
   qsa(".skin-swatch").forEach(sw => sw.classList.toggle("active", sw.dataset.skin === skinKey));
+  document.documentElement.dataset.skin = skinKey;
   saveState();
 }
-
-// ---------- CASSETTE FLIP ----------
-function flipCassette(toBack){
-  el("cassette-flipper").classList.toggle("flipped", toBack);
-}
-
-// ---------- STICKERS (drag / drop / move / resize / remove) ----------
-// v3 bug fixes:
-//   - placed stickers are now MOVABLE after drop (pointerdown/move/up on the sticker itself)
-//   - a corner handle resizes them
-//   - double-tap removes (single-tap no longer nukes them)
-//   - state.coverStickers / state.shellStickers are the source of truth and rehydrate on nav
-function setupStickerDragDrop(trayId, targetLayerId, storeArray){
-  const tray = el(trayId); if (!tray) return;
-  qsa(".sticker-item", tray).forEach(item => {
-    item.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ emoji: item.dataset.emoji, html: item.innerHTML }));
-    });
-    // click-to-place also honored, but now the placed sticker is editable (not committed the moment it's placed)
-    item.addEventListener("click", () => {
-      const x = 15 + Math.random()*55, y = 10 + Math.random()*45;
-      addStickerToLayer(targetLayerId, storeArray, item.dataset.emoji, item.innerHTML, x, y, 44);
-    });
-  });
-  const layer = el(targetLayerId); if (!layer) return;
-  layer.addEventListener("dragover", (e) => e.preventDefault());
-  layer.addEventListener("drop", (e) => {
-    e.preventDefault();
-    let payload; try { payload = JSON.parse(e.dataTransfer.getData("text/plain")); } catch(_) { payload = { emoji: e.dataTransfer.getData("text/plain"), html: null }; }
-    if (!payload || !payload.emoji) return;
-    const rect = layer.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    addStickerToLayer(targetLayerId, storeArray, payload.emoji, payload.html, x, y, 44);
-  });
-}
-
-function addStickerToLayer(layerId, storeArray, emoji, innerHtml, xPct, yPct, sizePx){
-  const layer = el(layerId); if (!layer) return;
-  const record = { emoji, html: innerHtml || emoji, x: xPct, y: yPct, size: sizePx || 44, rotation: 0 };
-  storeArray.push(record);
-  renderOneSticker(layer, storeArray, record);
+function applyInk(ink){
+  state.ink = ink || "midnight";
+  document.documentElement.dataset.ink = state.ink;
+  qsa(".ink-dot").forEach(d => d.classList.toggle("active", d.dataset.ink === state.ink));
   saveState();
 }
-
-function renderOneSticker(layer, storeArray, record){
-  const s = document.createElement("div");
-  s.className = "placed-sticker";
-  s.innerHTML = record.html || record.emoji;
-  s.style.left = record.x + "%";
-  s.style.top = record.y + "%";
-  s.style.width = record.size + "px";
-  s.style.height = record.size + "px";
-  s.style.transform = `translate(-50%,-50%) rotate(${record.rotation||0}deg)`;
-  // resize handle (bottom-right)
-  const handle = document.createElement("div");
-  handle.className = "sticker-handle";
-  s.appendChild(handle);
-
-  // DRAG
-  let dragging = false, startX=0, startY=0, startLeft=0, startTop=0;
-  s.addEventListener("pointerdown", (e) => {
-    if (e.target === handle) return; // handled below
-    e.stopPropagation();
-    dragging = true;
-    s.setPointerCapture(e.pointerId);
-    const rect = layer.getBoundingClientRect();
-    startX = e.clientX; startY = e.clientY;
-    startLeft = record.x; startTop = record.y;
-    s.classList.add("selected");
-  });
-  s.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const rect = layer.getBoundingClientRect();
-    const dx = ((e.clientX - startX) / rect.width) * 100;
-    const dy = ((e.clientY - startY) / rect.height) * 100;
-    record.x = Math.max(0, Math.min(100, startLeft + dx));
-    record.y = Math.max(0, Math.min(100, startTop + dy));
-    s.style.left = record.x + "%"; s.style.top = record.y + "%";
-  });
-  s.addEventListener("pointerup", (e) => { dragging = false; saveState(); });
-
-  // RESIZE
-  let resizing = false, rStartX=0, rStartSize=0;
-  handle.addEventListener("pointerdown", (e) => {
-    e.stopPropagation(); resizing = true; handle.setPointerCapture(e.pointerId);
-    rStartX = e.clientX; rStartSize = record.size;
-  });
-  handle.addEventListener("pointermove", (e) => {
-    if (!resizing) return;
-    const delta = e.clientX - rStartX;
-    record.size = Math.max(20, Math.min(160, rStartSize + delta));
-    s.style.width = record.size + "px"; s.style.height = record.size + "px";
-  });
-  handle.addEventListener("pointerup", () => { resizing = false; saveState(); });
-
-  // DOUBLE-TAP = remove (single-tap no longer removes; that was the v3 UX bug)
-  let lastTap = 0;
-  s.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const now = Date.now();
-    if (now - lastTap < 350){
-      const idx = storeArray.indexOf(record);
-      if (idx >= 0) storeArray.splice(idx, 1);
-      s.remove();
-      saveState();
-    }
-    lastTap = now;
-  });
-
-  layer.appendChild(s);
-}
-
-function rehydrateStickers(layerId, storeArray){
-  const layer = el(layerId); if (!layer) return;
-  layer.innerHTML = "";
-  storeArray.forEach(rec => renderOneSticker(layer, storeArray, rec));
+function applyPaper(paper){
+  state.paper = paper || "cream";
+  document.documentElement.dataset.paper = state.paper;
+  qsa(".paper-chip").forEach(d => d.classList.toggle("active", d.dataset.paper === state.paper));
+  saveState();
 }
 
 // ---------- PHOTO UPLOADS ----------
@@ -458,7 +292,7 @@ function saveVoice(){
     if (newName) t.display = newName; else t.display = t.original;
     t.memoPosition = el("memo-position").value;
   }
-  closeVoiceModal(); renderBackTracklist(); updateNowPlayingUI(); saveState();
+  closeVoiceModal(); renderBackTracklist(); if (deck) syncDeckTracks(); saveState();
 }
 
 let recordStartTime = null;
@@ -509,222 +343,69 @@ function playClosingTransitionThenGoToPlayer(){
   }, 1150);
 }
 
-// ---------- PLAYER SCREEN ----------
+// ---------- PLAYER SCREEN (the same player they'll get) ----------
+let deck = null;
 function buildPlayerScreen(){
   selectShell(state.shellShape);
-  selectWrapStyle(state.shellWrapStyle);
-  // sticker layer rehydrates via showScreen()
+  if (!deck) startDeck(); else syncDeckTracks();
+}
+function deckTracks(){
+  return state.tracks.map(t => ({ ...t, memoUrl: t.voiceMemoUrl || null }));
+}
+function syncDeckTracks(){
+  if (!deck) return;
+  deck.tracks.forEach((dt, i) => { const t = state.tracks[i]; if (t) Object.assign(dt, { display: t.display, note: t.note, memoPosition: t.memoPosition, memoUrl: t.voiceMemoUrl || null }); });
+  deck.emit();
+}
+const LANE_NAMES = { spotify: "Spotify", youtube: "YouTube", preview: "previews" };
+function startDeck(){
+  deck = new window.T4TDeck({ mount: el("deck-mount"), tracks: deckTracks(), source: state.source, apiBase: API_BASE, onChange: renderDeck });
+  const sw = el("lane-switch");
+  sw.innerHTML = deck.lanes.length > 1 ? deck.lanes.map(l => `<button data-lane="${l}">${LANE_NAMES[l]}</button>`).join("") : "";
+  qsa("button", sw).forEach(b => b.addEventListener("click", () => { deck.setLane(b.dataset.lane); deck.slot(b.dataset.lane); }));
+  if (deck.state.lane) deck.slot(deck.state.lane);
+  renderDeck({ ...deck.state, track: deck.current() });
+}
+function renderDeck(s){
+  const t = s.track;
+  state.isPlaying = !!s.playing;
+  state.currentTrackIndex = s.index;
+  const playing = !!s.playing;
+  const btn = el("btn-play"); if (btn) btn.textContent = s.loading ? "…" : (playing ? "❚❚" : "▶");
+  const prev = el("btn-preview-play"); if (prev) prev.textContent = playing ? "❚❚ pause" : "▶ listen";
+  qsa(".shell-art-overlay-reel, #reel-left, #reel-right").forEach(r => r.classList.toggle("spinning", playing));
+  const eq = el("eq-bars"); if (eq) eq.classList.toggle("playing", playing);
+  if (el("np-track")) el("np-track").textContent = s.memo ? "🎙️ your voice memo…" : (t ? t.display : "—");
+  if (el("np-artist")) el("np-artist").textContent = t ? (t.artist || "") : "";
+  if (el("deck-msg")){ el("deck-msg").textContent = s.message || ""; el("deck-msg").classList.toggle("nudge", !!s.needsTap); }
+  qsa("#lane-switch button").forEach(b => b.classList.toggle("on", b.dataset.lane === s.lane));
+  qsa("#back-tracklist .jsong").forEach((b, i) => b.classList.toggle("now", i === s.index && playing));
 }
 
 function shellInnerMarkup(shape){
   const shapeKey = (shape === "boombox" || shape === "carabiner") ? shape : "heart";
   const titleText = escapeHtml(state.tapeTitle);
-  const artOverlay = `
-      <div class="shell-art-overlay-title" id="shell-art-overlay-title">${titleText}</div>
-      <div class="shell-art-overlay-reel left" id="shell-art-overlay-reel-left"><div class="reel-spokes"></div></div>
-      <div class="shell-art-overlay-reel right" id="shell-art-overlay-reel-right"><div class="reel-spokes"></div></div>`;
   return `
-      <div class="shell-photo-wrap" id="shell-photo-wrap"></div>
       <div class="shell-art-stage">
-        <img class="shell-art-img" src="assets/full_recorder_${shapeKey}.svg" alt="${shapeKey} tape shell" draggable="false">
-        ${artOverlay}
+        <img class="shell-art-img" src="assets/full_recorder_${shapeKey}.svg" alt="${shapeKey} tape player" draggable="false">
+        <div class="shell-art-overlay-title" id="shell-art-overlay-title">${titleText}</div>
+        <div class="shell-art-overlay-reel left"><div class="reel-spokes"></div></div>
+        <div class="shell-art-overlay-reel right"><div class="reel-spokes"></div></div>
       </div>
-      <div class="shell-sticker-layer" id="shell-sticker-layer"></div>
-      <div class="eq-bars" id="eq-bars"><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="shell-photo-frame" id="shell-photo-frame"></div>`;
+      <div class="eq-bars" id="eq-bars"><span></span><span></span><span></span><span></span><span></span></div>`;
 }
-
 function selectShell(shape){
   state.shellShape = shape;
   qsa(".shell-option").forEach(o => o.classList.toggle("active", o.dataset.shell === shape));
   const shell = el("player-shell");
   shell.className = "player-shell shell-" + shape;
   shell.innerHTML = shellInnerMarkup(shape);
-  applyShellPhoto();
-  rehydrateStickers("shell-sticker-layer", state.shellStickers);
-  setupStickerDragDrop("shell-sticker-tray", "shell-sticker-layer", state.shellStickers);
+  if (deck) renderDeck({ ...deck.state, track: deck.current() });
   saveState();
-}
-
-function selectWrapStyle(style){
-  state.shellWrapStyle = style;
-  qsa(".wrap-btn").forEach(b => b.classList.toggle("active", b.dataset.wrap === style));
-  applyShellPhoto();
-  saveState();
-}
-
-function applyShellPhoto(){
-  const wrap = el("shell-photo-wrap"); const frame = el("shell-photo-frame");
-  if (!wrap || !frame) return;
-  wrap.classList.remove("active","fullbody","framed");
-  frame.classList.remove("active"); frame.innerHTML = "";
-
-  const useWrap = (state.shellWrapStyle === "fullbody" || state.shellWrapStyle === "both") && state.shellPhoto;
-  const useFrame = (state.shellWrapStyle === "framed" || state.shellWrapStyle === "both") && (state.shellWindowPhoto || state.shellPhoto);
-
-  if (useWrap){
-    wrap.style.backgroundImage = `url(${state.shellPhoto})`;
-    wrap.classList.add("active","fullbody");
-  }
-  if (useFrame){
-    frame.classList.add("active");
-    const src = state.shellWindowPhoto || state.shellPhoto;
-    frame.innerHTML = `<img src="${src}">`;
-  }
-}
-
-// ---------- YOUTUBE IFRAME LANE ----------
-// Called by the YouTube API when it finishes loading (must be a global)
-window.onYouTubeIframeAPIReady = function(){
-  // Create the actual player only when we hit the player screen with a track list
-  // (delayed until we know what to play; see initYouTubePlayer)
-  state.ytReady = true;
-};
-
-function initYouTubePlayer(){
-  if (!state.ytReady){ setTimeout(initYouTubePlayer, 400); return; }
-  if (state.ytPlayer){ return; }
-  const host = el("yt-audio-host"); if (!host) return;
-  host.innerHTML = `<div id="yt-audio-player"></div>`;
-  const opts = {
-    height: "1", width: "1",
-    playerVars: { playsinline: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0 },
-    events: {
-      onReady: (e) => {
-        e.target.setVolume(80);
-        // If we already have per-track YT video IDs (Spotify→YT bridge), queue the first one.
-        const firstId = getYtIdForTrack(state.currentTrackIndex);
-        if (firstId){ e.target.loadVideoById(firstId); }
-      },
-      onStateChange: (e) => {
-        if (e.data === 1){ hideAdCoverAfterDelay(); }
-        if (e.data === 0){
-          nextTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
-        }
-        if (e.data === 3){ showAdCover(); }
-      }
-    }
-  };
-  // Only auto-load a YT playlist when the user pasted a YouTube link directly.
-  // For Spotify→YT bridge we drive playback one video at a time via loadVideoById().
-  if (state.source === "youtube" && state.ytPlaylistId){
-    opts.playerVars.listType = "playlist";
-    opts.playerVars.list = state.ytPlaylistId;
-  }
-  // eslint-disable-next-line no-undef
-  state.ytPlayer = new YT.Player("yt-audio-player", opts);
-}
-
-// Return the YouTube video ID for a given track index (Spotify→YT bridge stores per-track IDs).
-function getYtIdForTrack(idx){
-  const t = state.tracks[idx];
-  return (t && t.ytVideoId) ? t.ytVideoId : null;
-}
-
-// Ad-cover overlay: whenever we transition tracks (or hit YT buffering), we show the hiss + play the
-// sender's voice memo on top. Legal, cheap, and on-brand.
-function showAdCover(){
-  state.adCoverActive = true;
-  const cover = el("ad-cover"); if (cover) cover.classList.add("active");
-  const t = state.tracks[state.currentTrackIndex];
-  if (t && t.voiceMemoUrl){
-    // If memo is set to "over-ad" or "intro", we play it now over the hiss
-    if (t.memoPosition === "over-ad" || t.memoPosition === "intro"){
-      const a = new Audio(t.voiceMemoUrl);
-      a.play().catch(()=>{});
-    }
-  }
-}
-function hideAdCoverAfterDelay(){
-  // give a beat for the memo/hiss to finish
-  setTimeout(() => {
-    state.adCoverActive = false;
-    const cover = el("ad-cover"); if (cover) cover.classList.remove("active");
-  }, 1200);
-}
-
-function crossfadeToTrack(idx){
-  showAdCover();
-  const t = state.tracks[idx];
-  if (state.ytPlayer && t){
-    if (state.source === "youtube" && state.ytPlaylistId){
-      // native YT playlist mode
-      try { state.ytPlayer.playVideoAt(idx % (state.tracks.length || 1)); } catch(_) {}
-    } else if (t.ytVideoId){
-      // Spotify→YouTube bridge: load the resolved video for this track
-      try { state.ytPlayer.loadVideoById(t.ytVideoId); } catch(_) {}
-    } else if (t.previewUrl){
-      // No YT match found → fall back to Spotify's 30s preview clip so SOMETHING plays
-      try {
-        const a = new Audio(t.previewUrl);
-        a.play().catch(()=>{});
-      } catch(_) {}
-    }
-  }
-  updateNowPlayingUI();
-}
-
-// ---------- PLAY CONTROLS ----------
-function togglePlay(){
-  state.isPlaying = !state.isPlaying;
-  const playBtn = el("btn-play"); if (playBtn) playBtn.textContent = state.isPlaying ? "⏸️" : "▶️";
-  const previewBtn = el("btn-preview-play"); if (previewBtn) previewBtn.textContent = state.isPlaying ? "⏸️" : "▶️";
-  const eq = el("eq-bars"); if (eq) eq.classList.toggle("playing", state.isPlaying);
-  const reels = qsa("#reel-left, #reel-right, .shell-art-overlay-reel");
-  reels.forEach(r => r.classList.toggle("spinning", state.isPlaying));
-
-  if (state.isPlaying){
-    initYouTubePlayer();
-    // If the YT player is ready, hit play; otherwise the onReady event will pick it up
-    if (state.ytPlayer && state.ytPlayer.playVideo){
-      try { state.ytPlayer.playVideo(); } catch(_) {}
-    }
-    updateNowPlayingUI();
-  } else {
-    if (state.ytPlayer && state.ytPlayer.pauseVideo){
-      try { state.ytPlayer.pauseVideo(); } catch(_) {}
-    }
-    const card = el("now-playing-card"); if (card) card.style.display = "none";
-    renderBackTracklist();
-  }
-}
-
-function nextTrack(){
-  if (!state.tracks.length) return;
-  state.currentTrackIndex = (state.currentTrackIndex + 1) % state.tracks.length;
-  updateNowPlayingUI();
-}
-function prevTrack(){
-  if (!state.tracks.length) return;
-  state.currentTrackIndex = (state.currentTrackIndex - 1 + state.tracks.length) % state.tracks.length;
-  updateNowPlayingUI();
-}
-
-function updateNowPlayingUI(){
-  const t = state.tracks[state.currentTrackIndex]; if (!t) return;
-  renderBackTracklist();
-  const card = el("now-playing-card"); if (!card) return;
-  el("np-track").textContent = t.display;
-  el("np-artist").textContent = t.artist;
-  const orig = el("np-original");
-  if (t.display && t.display !== t.original){
-    orig.textContent = `ℹ️ originally: ${t.original}`;
-    orig.style.display = "block";
-  } else { orig.style.display = "none"; }
-  const noteEl = el("np-note");
-  if (t.note){ noteEl.textContent = `📝 “${t.note}”`; noteEl.style.display = "block"; }
-  else { noteEl.textContent = ""; noteEl.style.display = "none"; }
-  const voiceBtn = el("np-voice-btn");
-  if (t.voiceMemoUrl){
-    voiceBtn.style.display = "inline-flex";
-    voiceBtn.onclick = () => { const a = new Audio(t.voiceMemoUrl); a.play().catch(()=>{}); };
-  } else { voiceBtn.style.display = "none"; voiceBtn.onclick = null; }
-  card.style.display = state.isPlaying ? "flex" : "none";
-  card.classList.remove("note-pop"); void card.offsetWidth; card.classList.add("note-pop");
 }
 
 // ---------- SEND SCREEN / QR ----------
-// v0.6: Send saves the whole decorated tape (memos, photos, stickers, letter) to
+// Send saves the whole tape (memos, photo, letter, style) to
 // the Worker and the QR opens YOUR recipient page — not the source playlist.
 let currentSend = null; // { id, url, embedUrl, ownerToken }
 
@@ -748,12 +429,6 @@ async function shrinkImage(dataUrl, maxSide = 1200){
     return await new Promise(res => c.toBlob(b => res(b || blob), "image/jpeg", 0.85));
   } catch(e){ return blob; }
 }
-function stickerPayload(list){
-  return (list || []).map(st => ({
-    emoji: st.emoji, x: Math.round(st.x * 10) / 10, y: Math.round(st.y * 10) / 10,
-    size: Math.round(st.size || 44), rotation: Math.round(st.rotation || 0)
-  }));
-}
 function buildTapePayload(){
   return {
     senderName: (el("sender-name")?.value || "").trim(),
@@ -763,11 +438,10 @@ function buildTapePayload(){
     playlist: state.playlistId ? { source: state.source, id: state.playlistId, title: state.playlistTitle } : null,
     tracks: state.tracks.map(t => ({
       original: t.original, display: t.display, artist: t.artist, note: t.note,
-      memoPosition: t.memoPosition, ytVideoId: t.ytVideoId || null
+      memoPosition: t.memoPosition, ytVideoId: t.ytVideoId || null,
+      spotifyId: t.spotifyId || null, previewUrl: t.previewUrl || null
     })),
-    stickersFront: stickerPayload(state.coverStickers),
-    stickersShell: stickerPayload(state.shellStickers),
-    skin: state.skin, shell: state.shellShape, wrapStyle: state.shellWrapStyle,
+    skin: state.skin, ink: state.ink, paper: state.paper, shell: state.shellShape,
     scene: el("scene-picker")?.value || "desk"
   };
 }
@@ -804,7 +478,7 @@ async function sendTape(){
     const fd = new FormData();
     fd.append("tape", JSON.stringify(tape));
     memoBlobs.forEach((blob, i) => { if (i < state.tracks.length) fd.append(`memo_${i}`, blob, `memo-${i}`); });
-    const photos = [["cover", state.coverPhoto], ["shellPhoto", state.shellPhoto], ["windowPhoto", state.shellWindowPhoto]];
+    const photos = [["cover", state.coverPhoto]];
     for (const [field, dataUrl] of photos){
       if (!dataUrl) continue;
       const b = await shrinkImage(dataUrl); if (b) fd.append(field, b, `${field}.jpg`);
@@ -897,19 +571,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   qsa(".skin-swatch").forEach(sw => sw.addEventListener("click", () => applySkin(sw.dataset.skin)));
+  qsa(".ink-dot").forEach(d => d.addEventListener("click", () => applyInk(d.dataset.ink)));
+  qsa(".paper-chip").forEach(d => d.addEventListener("click", () => applyPaper(d.dataset.paper)));
 
-  setupStickerDragDrop("sticker-tray", "front-sticker-layer", state.coverStickers);
   setupPhotoUpload("cover-photo-input", (dataUrl) => {
     state.coverPhoto = dataUrl;
     const slot = el("cassette-photo-slot");
     slot.style.backgroundImage = `url(${dataUrl})`;
-    slot.querySelector(".cassette-photo-placeholder").style.display = "none";
+    slot.classList.add("has-photo");
     saveState();
   });
   el("cassette-photo-slot").addEventListener("click", () => el("cover-photo-input").click());
-
-  el("btn-flip-to-back").addEventListener("click", () => flipCassette(true));
-  el("btn-flip-to-front").addEventListener("click", () => flipCassette(false));
 
   el("btn-open-letter").addEventListener("click", openLetterModal);
   el("letter-close").addEventListener("click", closeLetterModal);
@@ -923,21 +595,14 @@ document.addEventListener("DOMContentLoaded", () => {
   el("btn-back-to-cover").addEventListener("click", () => showScreen("screen-tape"));
 
   qsa(".shell-option").forEach(o => o.addEventListener("click", () => selectShell(o.dataset.shell)));
-  qsa(".wrap-btn").forEach(b => b.addEventListener("click", () => selectWrapStyle(b.dataset.wrap)));
-  setupPhotoUpload("shell-photo-input", (dataUrl) => { state.shellPhoto = dataUrl; applyShellPhoto(); saveState(); });
-  setupPhotoUpload("shell-window-photo-input", (dataUrl) => { state.shellWindowPhoto = dataUrl; applyShellPhoto(); saveState(); });
-
-  el("btn-play").addEventListener("click", togglePlay);
-  el("btn-rewind").addEventListener("click", () => {
-    el("btn-rewind").style.transform="scale(0.85) rotate(-15deg)"; setTimeout(()=>el("btn-rewind").style.transform="",200);
-    prevTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
+  el("btn-play").addEventListener("click", () => { if (!deck) startDeck(); deck.toggle(); });
+  el("btn-rewind").addEventListener("click", () => deck && deck.prev());
+  el("btn-ff").addEventListener("click", () => deck && deck.next());
+  // "listen" on the J-card jumps straight to the player screen and plays
+  el("btn-preview-play").addEventListener("click", () => {
+    buildPlayerScreen(); showScreen("screen-player");
+    if (deck && !deck.state.playing) deck.play();
   });
-  el("btn-ff").addEventListener("click", () => {
-    el("btn-ff").style.transform="scale(0.85) rotate(15deg)"; setTimeout(()=>el("btn-ff").style.transform="",200);
-    nextTrack(); if (state.isPlaying) crossfadeToTrack(state.currentTrackIndex);
-  });
-  const previewPlayBtn = el("btn-preview-play");
-  if (previewPlayBtn) previewPlayBtn.addEventListener("click", togglePlay);
 
   el("btn-to-send").addEventListener("click", () => { currentSend = null; buildSendScreen(); showScreen("screen-send"); });
   el("btn-send-tape").addEventListener("click", sendTape);
@@ -946,4 +611,3 @@ document.addEventListener("DOMContentLoaded", () => {
   el("btn-share").addEventListener("click", shareTape);
   el("btn-copy").addEventListener("click", copyLink);
 });
-// v4.1 build - 2026-09-20T18:05:10Z
