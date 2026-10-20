@@ -1,0 +1,19 @@
+{
+  "name": "t4tmix",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "T4T Mix — mixtapes, minus the necklace. A Queer Accounting Solutions creation.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check public/app.js && node --check public/recipient.js && node --check src/index.js",
+    "test": "node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "mimetext": "^3.0.24"
+  },
+  "devDependencies": {
+    "wrangler": "^4.45.0"
+  }
+}
