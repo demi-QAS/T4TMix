@@ -76,9 +76,13 @@ export async function authStart(req, env) {
     if (!r.ok) {
       console.error("twilio start", r.status, r.data && r.data.code, r.data && r.data.message);
       const c = r.data && r.data.code;
-      // 21608 / 21614 / 60205: trial accounts can only text verified numbers, or the number can't get SMS
-      if (c === 21608 || c === 60205 || /unverified|trial/i.test((r.data && r.data.message) || ""))
-        return err("this number can't get texts from us yet — T4T Mix is still in its trial setup. try again soon 💛", 400);
+      const msg = String((r.data && r.data.message) || "").slice(0, 300);
+      try { await env.TAPES.put("twilio:lasterr", JSON.stringify({ at: Date.now(), status: r.status, code: c || null, message: msg, phone: maskPhone(phone) }), { expirationTtl: 60 * 60 * 24 * 14 }); } catch (e) {}
+      const tag = c ? ` (error ${c})` : "";
+      if (c === 21608) return err("this number can't get codes from us yet — our texting setup is still being approved. try again soon 💛" + tag, 400);
+      if (c === 60205 || c === 21614 || c === 21635 || c === 60200) return err("that number can't get texts — please use a mobile number (not a landline or some internet numbers)" + tag, 400);
+      if (c === 60605 || c === 21408) return err("we can't text that country yet — sorry! 💛" + tag, 400);
+      if (c === 60410 || c === 60203 || c === 60212) return err("too many code requests for this number — wait a bit and try again" + tag, 429);
       if (r.status === 401 || r.status === 404) return err("sign-in is having a hiccup on our end — try again later", 502);
       return err(r.status === 400 ? "we couldn't text that number — double-check it?" : "couldn't send a code right now", r.status === 400 ? 400 : 502);
     }

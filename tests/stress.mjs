@@ -34,7 +34,7 @@ async function sendTape(n, memoEvery = 1, opts = {}) {
 
 console.log(`\n— T4T Mix stress test against ${BASE}\n`);
 const h = await (await fetch(`${BASE}/api/health`)).json();
-ok(h.version === "0.9.1", `health reports v${h.version}`);
+ok(h.version === "0.9.4", `health reports v${h.version}`);
 
 // 1. voice memos on every song of a big tape
 let t = performance.now();

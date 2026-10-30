@@ -102,6 +102,7 @@ export const DEFAULT_CONFIG = {
   // ---- access-code gate (free beta) ----
   gate: true,                  // true = senders need an access code; gift + reply links always open
   surveyUrl: "https://bit.ly/nonprofit-tax-survey",
+  p990Url: "https://thepeoples990.com",
   venmo: "Queerasolutions",    // Venmo handle, no @
   gateSurveyNote: "finish it and your code is on the thank-you page.",
   gateDonateNote: "any amount. put your phone or email in the note and we'll send your code.",
@@ -125,6 +126,10 @@ export function mergeConfig(base, patch) {
   if (typeof patch.donationUrl === "string") {
     const u = str(patch.donationUrl, 300);
     out.donationUrl = /^https:\/\/[^\s"'<>]+$/.test(u) ? u : "";
+  }
+  if (typeof patch.p990Url === "string") {
+    const u = str(patch.p990Url, 300);
+    out.p990Url = /^https:\/\/[^\s"'<>]+$/.test(u) ? u : "";
   }
   if (typeof patch.surveyUrl === "string") {
     const u = str(patch.surveyUrl, 300);
@@ -158,7 +163,8 @@ export function publicConfig(cfg, env) {
     sampleFallback: cfg.sampleFallback, lanes: cfg.lanes, defaultLane: cfg.defaultLane,
     maxMemoSeconds: cfg.maxMemoSeconds,
     soundcloudSearch: !!(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET),
-    gate: cfg.gate, surveyUrl: cfg.surveyUrl, venmo: cfg.venmo,
+    gate: cfg.gate, surveyUrl: cfg.surveyUrl, venmo: cfg.venmo, p990Url: cfg.p990Url,
+    smsReplies: !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && (env.TWILIO_FROM || env.TWILIO_MESSAGING_SID)),
     gateSurveyNote: cfg.gateSurveyNote, gateDonateNote: cfg.gateDonateNote,
   };
 }

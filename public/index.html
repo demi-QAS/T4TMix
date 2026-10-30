@@ -82,6 +82,7 @@
 
 
 <!-- ============ ACCOUNT BAR ============ -->
+<button class="reply-toast" id="reply-toast" hidden>💌 <span id="reply-toast-text">someone wrote back!</span> <b>open →</b></button>
 <div class="account-bar" id="account-bar">
   <button class="acct-btn" id="btn-inbox" hidden>📬 my tapes <span class="badge" id="inbox-badge" hidden>0</span></button>
   <button class="acct-btn" id="btn-signin" hidden>📱 sign in</button>
@@ -112,6 +113,16 @@
       💌 every tape plays on <strong>YouTube</strong> first — full songs, no login (sometimes a short ad).
       The person you send it to can switch to SoundCloud or Spotify if they like. Your voice memos play either way.
     </p>
+
+    <div class="support-card" id="support-card">
+      <p class="support-title">💛 free beta, powered by community</p>
+      <p class="support-sub">T4T Mix is a gift from <b>Queer Accounting Solutions</b>. help us build a public tool for reading nonprofit money and power.</p>
+      <div class="support-links">
+        <a class="support-link" id="land-survey" href="https://bit.ly/nonprofit-tax-survey" target="_blank" rel="noopener">✏️ <span><b>take the mutual aid survey</b><small>it's how you get your access code</small></span></a>
+        <a class="support-link" id="land-p990" href="https://thepeoples990.com" target="_blank" rel="noopener">📄 <span><b>The People's 990</b><small>audit for the people — see what we're building</small></span></a>
+        <a class="support-link" id="land-venmo" href="https://venmo.com/u/Queerasolutions" target="_blank" rel="noopener">💸 <span><b>chip in on Venmo</b><small id="land-venmo-handle">@Queerasolutions</small></span></a>
+      </div>
+    </div>
 
     <div class="launch-card" id="launch-card">
       <p class="launch-title">🧪 T4T Mix is brand new</p>
@@ -345,6 +356,21 @@
 </section>
 
 <!-- ============ SIGN IN ============ -->
+<div id="signin-warn-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div class="modal-track-name">psst — you're not signed in 📼</div>
+    <p class="modal-sub">you can totally make a tape without signing in. but if you sign in with your phone first:</p>
+    <ul class="warn-list">
+      <li>💾 <b>you keep a copy</b> of every tape you send — even on a new phone</li>
+      <li>💌 <b>you can get their reply</b> — <span id="warn-reply-how">it lands in your tapes inbox and we'll flag it the moment you're back</span></li>
+    </ul>
+    <p class="modal-sub small-note">without signing in, your tapes only live on this device, and replies can get lost if you clear your browser.</p>
+    <button id="btn-warn-signin" class="btn-primary btn-wide">sign in with my phone</button>
+    <button id="btn-warn-skip" class="btn-ghost small">keep going without signing in</button>
+  </div>
+</div>
+
 <div id="signin-modal" class="modal-overlay">
   <div class="modal-card">
     <button class="modal-close" data-close-modal>✕</button>
@@ -375,7 +401,7 @@
     <div class="modal-track-name">📬 my tapes</div>
     <p class="modal-sub" id="inbox-who"></p>
     <div id="inbox-list" class="inbox-list"></div>
-    <label class="toggle-row"><input type="checkbox" id="inbox-notify" checked> text me when someone writes back</label>
+    <label class="toggle-row"><input type="checkbox" id="inbox-notify" checked> <span id="inbox-notify-label">text me when someone writes back</span></label>
     <button id="btn-signout" class="btn-ghost small">sign out</button>
   </div>
 </div>

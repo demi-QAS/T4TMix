@@ -27,7 +27,7 @@ import { authStart, authVerify, authLogout, getMe, patchMe, claimTapes, getUser,
 import { handleAdmin } from "./admin.js";
 import { hasAccess, gateError, redeem, accessStatus } from "./access.js";
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.4";
 
 // ---------- tapes ----------
 const MEDIA_FILE = /^(memo-\d{1,3}\.(webm|ogg|mp4|m4a)|(cover|shell|window)\.(jpg|png|webp|gif)|reply\.(webm|ogg|mp4|m4a))$/;
@@ -210,7 +210,7 @@ async function postReply(req, env, id, ctx) {
     texted = !!(owner && owner.notify !== false && (env.TWILIO_FROM || env.TWILIO_MESSAGING_SID));
   }
   if (env.SEND_EMAIL && t.senderEmail) ctx.waitUntil(sendReplyEmail(env, t, replyUrl).catch((e) => console.error("email failed", e)));
-  return j({ ok: true, replyUrl, senderNotified: texted || !!(env.SEND_EMAIL && t.senderEmail), senderName: t.senderName || "" });
+  return j({ ok: true, replyUrl, senderNotified: texted || !!(env.SEND_EMAIL && t.senderEmail), inInbox: !!t.ownerUid, senderName: t.senderName || "" });
 }
 
 async function sendReplyEmail(env, t, replyUrl) {

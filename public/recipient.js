@@ -234,6 +234,7 @@
       $("replyForm").hidden = true; $("replyDone").hidden = false; $("btnReply").hidden = true;
       $("replyDoneSub").textContent = d.senderNotified
         ? `${tape.senderName || "they"} just got a text — it's on its way 💌`
+        : d.inInbox ? `it's waiting in ${tape.senderName || "their"}${tape.senderName ? "'s" : ""} T4T Mix inbox 💌 want to make sure they see it soon? send them this link too 👇`
         : `want to be sure ${tape.senderName || "they"} sees it? send them this link 👇`;
       const link = d.replyUrl;
       $("replyShareRow").hidden = !link;

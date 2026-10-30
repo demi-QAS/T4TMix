@@ -82,7 +82,14 @@ export async function handleAdmin(req, env, path) {
             : r.status === 404 ? "Twilio can't find that Verify Service SID on this account — copy it again from Verify → Services."
             : (d.message || "Twilio returned an error") };
       } catch (e) { out.twilio = { ok: false, why: "couldn't reach Twilio from Cloudflare — try again" }; }
+      try {
+        const a = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}.json`, {
+          headers: { authorization: "Basic " + btoa(`${sid}:${String(env.TWILIO_AUTH_TOKEN).trim()}`) } });
+        const ad = await a.json().catch(() => ({}));
+        if (a.ok) out.account = { type: ad.type || "?", status: ad.status || "?", name: ad.friendly_name || "" };
+      } catch (e) {}
     }
+    try { const le = await env.TAPES.get("twilio:lasterr"); out.lastError = le ? JSON.parse(le) : null; } catch (e) { out.lastError = null; }
     return j(out);
   }
 

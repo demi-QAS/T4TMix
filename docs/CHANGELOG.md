@@ -1,5 +1,22 @@
 # Changelog
 
+
+
+
+## 0.9.4 — 2026-10-30
+- Landing page: new "free beta, powered by community" card linking the mutual aid survey, The People's 990 (thepeoples990.com) and Venmo. The People's 990 link is editable in admin → access gate.
+- Replies: signed-in senders now get an in-app alert ("💌 Sam wrote back on …") when they open or come back to T4T Mix, plus the inbox badge. Checks every 90 s while the tab is open.
+- Honest reply copy: the sign-in reminder and inbox only promise text alerts when a Twilio sending number (TWILIO_FROM or TWILIO_MESSAGING_SID) is set. Otherwise they say replies land in your inbox.
+- Recipient's "reply sent" screen says the reply is waiting in the sender's inbox when the sender has an account.
+
+## 0.9.3 — 2026-10-30
+- Friendly sign-in reminder: tapping "Load my playlist" with a link pasted while signed out pops up a note explaining that signing in keeps a copy of every tape you send and lets you get a reply by text. "sign in with my phone" opens sign-in and then keeps loading the playlist; "keep going without signing in" skips it for the rest of the visit. Only shows when phone sign-in is switched on.
+
+## 0.9.2 — 2026-10-30
+- Sign-in errors now say what actually went wrong (not-yet-approved texting vs landline/non-mobile vs country vs too many tries) and show the Twilio error code.
+- The last Twilio sign-in failure is saved (14 days) and shown in admin → 📱 phone sign-in check, with a link to Twilio's explanation.
+- The check now also reports whether the keys on this worker belong to an upgraded (Full) or Trial Twilio account.
+
 ## 0.7.0 — 2026-10-20 (it actually plays)
 - **Music plays on the recipient page.** The Play button used to only animate; the bottom YouTube bar was 80px tall (YouTube requires at least 200×200) and played its own list, so the song didn't match the label. New `public/player.js` drives every song from our buttons (play, pause, next, previous, tap a song, auto-advance).
 - **Three ways to listen,** switchable on the page: Spotify (full songs when signed in, otherwise 30-second previews), YouTube (full songs, may show an ad; the player is visible at 200px), and previews. Voice memos play before (intro / over the ad) or after (outro) their song.

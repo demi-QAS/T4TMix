@@ -121,6 +121,8 @@
           <label class="row"><div>require an access code<small>off = anyone can make tapes. gift links + reply links always open.</small></div><span class="switch"><input type="checkbox" data-k="gate"><span></span></span></label>
           <label class="row" style="display:block"><div>survey link<small>shown as option 1 on the cover page</small></div></label>
           <input type="url" id="surveyUrl" placeholder="https://bit.ly/…" />
+          <label class="row" style="display:block"><div>The People's 990 link<small>shown on the landing page with the survey + Venmo</small></div></label>
+          <input type="url" id="p990Url" placeholder="https://thepeoples990.com" />
           <label class="row" style="display:block"><div>survey note</div></label>
           <input type="text" id="gateSurveyNote" maxlength="160" />
           <label class="row" style="display:block"><div>Venmo handle (no @)</div></label>
@@ -220,7 +222,7 @@
     document.querySelectorAll("[data-lane]").forEach((i) => { i.checked = !!cfg.lanes[i.dataset.lane]; });
     $("defaultLane").value = cfg.defaultLane; $("maxMemo").value = cfg.maxMemoSeconds;
     $("banner").value = cfg.banner || "";
-    $("surveyUrl").value = cfg.surveyUrl || ""; $("venmo").value = cfg.venmo || ""; $("gateSurveyNote").value = cfg.gateSurveyNote || ""; $("gateDonateNote").value = cfg.gateDonateNote || ""; $("donationUrl").value = cfg.donationUrl || ""; $("donationLabel").value = cfg.donationLabel || "";
+    $("surveyUrl").value = cfg.surveyUrl || ""; $("p990Url").value = cfg.p990Url || ""; $("venmo").value = cfg.venmo || ""; $("gateSurveyNote").value = cfg.gateSurveyNote || ""; $("gateDonateNote").value = cfg.gateDonateNote || ""; $("donationUrl").value = cfg.donationUrl || ""; $("donationLabel").value = cfg.donationLabel || "";
     $("raw").textContent = JSON.stringify(cfg, null, 2);
   }
   function paintStats(rows, f) {
@@ -285,7 +287,9 @@
   $("saveGate").onclick = () => {
     const u = $("surveyUrl").value.trim();
     if (u && !/^https:\/\//.test(u)) return toast("the survey link must start with https://");
-    save({ surveyUrl: u, venmo: $("venmo").value, gateSurveyNote: $("gateSurveyNote").value, gateDonateNote: $("gateDonateNote").value });
+    const p9 = $("p990Url").value.trim();
+    if (p9 && !/^https:\/\//.test(p9)) return toast("The People's 990 link must start with https://");
+    save({ p990Url: p9, surveyUrl: u, venmo: $("venmo").value, gateSurveyNote: $("gateSurveyNote").value, gateDonateNote: $("gateDonateNote").value });
   };
   $("makeShared").onclick = () => api("codes", { method: "POST", body: JSON.stringify({ kind: "shared", code: $("sharedCode").value.trim(), label: "survey thank-you page" }) })
     .then((d) => { $("newCodes").innerHTML = "new survey code: <b>" + esc(d.made[0].code) + "</b>"; $("sharedCode").value = ""; loadCodes(); }).catch((e) => toast("😿 " + e.message));
@@ -311,6 +315,9 @@
       });
       d.shape.forEach((t) => { h += line(false, esc(t)); });
       if (d.twilio) h += line(d.twilio.ok, d.twilio.ok ? `Twilio accepted your keys (service: ${esc(d.twilio.service)})` : esc(d.twilio.why));
+      if (d.account) h += line(d.account.type === "Full" && d.account.status === "active", d.account.type === "Full" ? `Twilio account is <b>upgraded (Full)</b>, status: ${esc(d.account.status)}` : `Twilio account type is <b>${esc(d.account.type)}</b> — the keys on this worker belong to a <b>trial</b> account. if you upgraded a different account (or a subaccount), copy <i>that</i> account's SID + Auth Token here.`);
+      if (d.lastError) { const le = d.lastError; h += `<div style="padding:8px 10px;margin:6px 0;border-radius:10px;background:rgba(194,65,109,.08)"><b>last sign-in failure</b> · ${esc(new Date(le.at).toLocaleString())} · ${esc(le.phone || "")}<br><span class="mono">Twilio ${esc(String(le.code || le.status))}</span> — ${esc(le.message || "")}${le.code ? ` · <a href="https://www.twilio.com/docs/api/errors/${esc(String(le.code))}" target="_blank" rel="noopener">what this means</a>` : ""}</div>`; }
+      else h += line(true, "no sign-in failures recorded in the last 2 weeks");
       h += line(d.loginSwitch, d.loginSwitch ? "phone sign-in switch is on" : "phone sign-in switch is OFF — flip it on under switches");
       if (d.twilio && d.twilio.ok && d.loginSwitch) h += '<p style="margin:10px 0 0">✅ all good. the sign-in button shows up on the site within a minute. on a Twilio trial account, only numbers you verified in Twilio can get codes.</p>';
       o.innerHTML = h;

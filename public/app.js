@@ -622,6 +622,7 @@ async function loadConfig(){
     if (appConfig.donationUrl){ a.href = appConfig.donationUrl; if (id !== "fb-donate") a.textContent = "☕ " + (appConfig.donationLabel || "chip in"); }
   });
   qsa("[data-open-feedback]").forEach(b => b.hidden = !appConfig.feedback);
+  paintReplyCopy(); paintSupportLinks();
   renderAccountBar();
   await checkAccess();
 }
@@ -655,7 +656,7 @@ function showGate(){
 function hideGate(animate){
   const g = el("gate");
   document.body.classList.remove("gated");
-  gateOpen = false;
+  gateOpen = false; setTimeout(paintReplyToast, animate ? 850 : 0);
   if (!animate){ g.hidden = true; return; }
   g.classList.add("opening");
   setTimeout(() => { g.hidden = true; g.classList.remove("opening"); }, 800);
@@ -709,6 +710,29 @@ function renderAccountBar(){
   el("btn-inbox").hidden = !session.token;
   const unread = session.me ? session.me.unread : 0;
   el("inbox-badge").hidden = !unread; el("inbox-badge").textContent = unread;
+  paintReplyToast();
+}
+// in-app alert when a reply is waiting (works with or without text alerts)
+let toastDismissed = false;
+function paintReplyToast(){
+  const me = session.me; const t = el("reply-toast"); if (!t) return;
+  const fresh = me && session.token ? (me.tapes || []).filter(x => x.reply && !x.reply.seen) : [];
+  if (!fresh.length || toastDismissed || gateOpen){ t.hidden = true; return; }
+  const who = fresh[0].reply.from || "someone";
+  el("reply-toast-text").textContent = fresh.length > 1 ? `${fresh.length} new replies on your tapes!` : `${who} wrote back on "${fresh[0].title || "your tape"}"!`;
+  t.hidden = false;
+}
+function paintReplyCopy(){
+  const sms = !!appConfig.smsReplies;
+  if (el("warn-reply-how")) el("warn-reply-how").textContent = sms ? "we text you when they write back (no texting back and forth — just a heads-up)" : "it lands in your tapes inbox and we'll flag it the moment you're back";
+  if (el("inbox-notify-label")) el("inbox-notify-label").textContent = sms ? "text me when someone writes back" : "text alerts for replies are coming soon — new replies show up here";
+  if (el("inbox-notify")) el("inbox-notify").disabled = !sms;
+}
+function paintSupportLinks(){
+  const sv = appConfig.surveyUrl || "", p9 = appConfig.p990Url || "", v = appConfig.venmo || "";
+  if (el("land-survey")){ el("land-survey").hidden = !sv; if (sv) el("land-survey").href = sv; }
+  if (el("land-p990")){ el("land-p990").hidden = !p9; if (p9) el("land-p990").href = p9; }
+  if (el("land-venmo")){ el("land-venmo").hidden = !v; if (v){ el("land-venmo").href = `https://venmo.com/u/${encodeURIComponent(v)}`; el("land-venmo-handle").textContent = "@" + v; } }
 }
 async function refreshMe(){
   if (!session.token) return null;
@@ -767,6 +791,13 @@ async function verifyCode(){
   finally { btn.disabled = false; }
 }
 let pendingAfterSignin = null;
+// gentle reminder: not signed in → explain why signing in helps (once per visit)
+function loadWithSigninReminder(){
+  let warned = false; try { warned = sessionStorage.getItem("t4tmix.warned.v1") === "1"; } catch(e){}
+  const hasLink = ["spotify-input","ytm-input","sc-input"].some(id => el(id) && el(id).value.trim());
+  if (hasLink && appConfig.login && !session.token && !warned){ openModal("signin-warn-modal"); return; }
+  loadPlaylist();
+}
 async function openInbox(){
   openModal("inbox-modal");
   el("inbox-list").innerHTML = '<p class="muted">loading…</p>';
@@ -833,7 +864,21 @@ document.addEventListener("DOMContentLoaded", () => {
   qsa(".modal-overlay").forEach(m => m.addEventListener("click", (e) => { if (e.target === m && m.id !== "voice-modal") m.classList.remove("active"); }));
   el("btn-delete-memo").addEventListener("click", deleteMemo);
 
-  el("btn-load").addEventListener("click", loadPlaylist);
+  el("btn-load").addEventListener("click", loadWithSigninReminder);
+  el("reply-toast").addEventListener("click", () => { toastDismissed = true; el("reply-toast").hidden = true; openInbox(); });
+  // check for new replies when they come back to the tab
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && session.token){ toastDismissed = false; refreshMe(); } });
+  setInterval(() => { if (!document.hidden && session.token) refreshMe(); }, 90000);
+  el("btn-warn-signin").addEventListener("click", () => {
+    closeModal(el("signin-warn-modal"));
+    pendingAfterSignin = () => loadPlaylist();
+    openSignin();
+  });
+  el("btn-warn-skip").addEventListener("click", () => {
+    try { sessionStorage.setItem("t4tmix.warned.v1", "1"); } catch(e){}
+    closeModal(el("signin-warn-modal"));
+    loadPlaylist();
+  });
   el("gate-form").addEventListener("submit", redeemCode);
   el("gate-code").addEventListener("input", () => { el("gate-msg").textContent = ""; });
   el("gate-signin").addEventListener("click", openSignin);
