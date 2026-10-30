@@ -10,6 +10,7 @@
 <link rel="icon" href="/assets/full_recorder_boombox.png" />
 </head>
 <body>
+<div class="site-banner" id="siteBanner" hidden></div>
 
 <!-- ============ THE GIFT ============ -->
 <section class="gift-stage" id="giftStage" aria-label="a wrapped mixtape">
@@ -124,8 +125,8 @@
   <div class="sheet-card">
     <button class="sheet-x" data-close aria-label="close">×</button>
     <div id="replyForm">
-      <p class="sheet-title">write back</p>
-      <p class="sheet-sub">one reply per tape — make it count</p>
+      <p class="sheet-title">write back to <span id="replyToName">them</span></p>
+      <p class="sheet-sub">one reply per tape — make it count. they get a private link to open it.</p>
       <div class="tabs">
         <button class="tab on" data-tab="text">📝 write</button>
         <button class="tab" data-tab="voice">🎙️ say it</button>
@@ -145,7 +146,12 @@
       <p class="sheet-fine">goes only to whoever made this tape</p>
     </div>
     <div id="replyDone" class="reply-done" hidden>
-      <p class="big">💌</p><p class="sheet-title">sent</p><p class="sheet-sub">they'll see it next time they check.</p>
+      <p class="big">💌</p><p class="sheet-title">sealed &amp; sent</p><p class="sheet-sub" id="replyDoneSub">they'll see it next time they check.</p>
+      <div class="reply-share" id="replyShareRow" hidden>
+        <button class="btn" id="replyShare">📤 send them the link</button>
+        <div class="reply-share-row"><a class="pill" id="replySms" href="#">💬 text it</a><button class="pill" id="replyCopy">🔗 copy</button></div>
+      </div>
+      <a class="link" href="/" target="_blank" rel="noopener">make them one back →</a>
     </div>
   </div>
 </div>
@@ -155,8 +161,8 @@
   <div class="sheet-card">
     <button class="sheet-x" data-close aria-label="close">×</button>
     <p class="sheet-title">this is a T4T Mix</p>
-    <p class="sheet-p">someone made you a mixtape. press play — the songs stream from Spotify or YouTube, and any voice memos and letters come from the person who made it.</p>
-    <p class="sheet-p">on Spotify you hear full songs if you're logged in to Spotify in this browser, 30-second previews if not. YouTube plays full songs but may show ads.</p>
+    <p class="sheet-p">someone made you a mixtape. press play — the songs stream from YouTube, SoundCloud or Spotify, and any voice memos and letters come from the person who made it.</p>
+    <p class="sheet-p">songs play on YouTube by default — full songs, no login (sometimes a short ad). you can switch to SoundCloud or Spotify under "the tape deck".</p>
     <p class="sheet-fine">made by Queer Accounting Solutions · no algorithm, no gatekeeping</p>
   </div>
 </div>

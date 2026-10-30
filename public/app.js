@@ -1,4 +1,4 @@
-// ============ T4T Mix v0.7 — the tape, the player, send ============
+// ============ T4T Mix v0.8 — the tape, the player, send, sign-in, feedback ============
 // One shared player (player.js / T4TDeck) drives Spotify, YouTube and previews from OUR buttons.
 // Stickers are gone; the tape is personalised with skin, pen colour, paper, title, engraving and a photo.
 
@@ -20,7 +20,8 @@ const FALLBACK_PLAYLIST_TITLE = "Jack O'Lantern - Goodbye Playlist ✈️🌍 �
 // same-origin ("/api/..."). Only set this if you ever host the front-end elsewhere.
 const API_BASE = (window.T4T_API_BASE || "").replace(/\/$/, "");
 const LS_SENT = "t4tmix.sent.v1";       // [{ id, url, ownerToken, title, at }]
-const LS_PHOTOS = "t4tmix.photos.v1";   // photos kept separate so a big photo can't wipe the rest of your tape
+const LS_PHOTOS = "t4tmix.photos.v1";
+const LS_SESSION = "t4tmix.session.v1";  // phone sign-in token   // photos kept separate so a big photo can't wipe the rest of your tape
 // Voice memos live in memory as Blobs until Send (blob: URLs die on reload anyway).
 const memoBlobs = new Map();            // trackIndex -> Blob
 
@@ -38,13 +39,13 @@ const STORAGE_KEY = "t4tmix.state.v7";
 // Every track carries { display, original } — display is what the recipient sees; original stays
 // in the credits (surfaced on the now-playing card as a subtle "originally: …" line).
 const state = {
-  source: "spotify", playlistUrl: "", playlistId: "", playlistTitle: "",
+  source: "youtube", playlistUrl: "", playlistId: "", playlistTitle: "",
   tapeTitle: "a mix for you", engraving: "", skin: "trans",
   tracks: [], coverPhoto: null, ink: "midnight", paper: "cream",
   letterText: "",
   shellShape: "boombox",
   activeTrackIndex: null, mediaRecorder: null, recordedChunks: [], recordTimerInterval: null,
-  isPlaying: false, mixtapesSentThisMonth: 1,
+  isPlaying: false,
   currentTrackIndex: 0, playbackTimer: null,
   ytPlaylistId: ""
 };
@@ -56,6 +57,7 @@ function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 function extractSpotifyId(url){ const m = url.match(/playlist[\/:]([a-zA-Z0-9]+)/); return m ? m[1] : null; }
 function extractYouTubeListId(url){ const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/); return m ? m[1] : null; }
+function isSoundCloudSet(url){ return /^https?:\/\/((www|m)\.)?soundcloud\.com\/[^/]+\/sets\/[^/?#]+|^https?:\/\/on\.soundcloud\.com\//i.test(url); }
 function extractYouTubeVideoId(url){ const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? m[1] : null; }
 
 // ---------- PERSISTENCE ----------
@@ -111,8 +113,15 @@ function showScreen(id){
 async function loadPlaylist(){
   const spotifyUrl = el("spotify-input").value.trim();
   const ytmUrl = el("ytm-input").value.trim();
+  const scUrl = (el("sc-input") ? el("sc-input").value : "").trim();
   const statusEl = el("load-status");
   statusEl.textContent = "loading your playlist…";
+  const btn = el("btn-load"); btn.disabled = true;
+  try { await loadPlaylistInner(spotifyUrl, ytmUrl, scUrl, statusEl); } finally { btn.disabled = false; }
+}
+async function loadPlaylistInner(spotifyUrl, ytmUrl, scUrl, statusEl){
+  if (ytmUrl && !extractYouTubeListId(ytmUrl)){ statusEl.textContent = "that YouTube link needs a playlist in it (…&list=…). open the playlist and copy its link 🙏"; return; }
+  if (scUrl && !isSoundCloudSet(scUrl)){ statusEl.textContent = "that SoundCloud link should look like soundcloud.com/artist/sets/playlist-name"; return; }
 
   if (ytmUrl){
     state.source = "youtube";
@@ -130,11 +139,28 @@ async function loadPlaylist(){
         ok = true;
       }
     } catch(e){ /* fall through */ }
+    if (!ok && !appConfig.sampleFallback){ statusEl.textContent = "couldn't read that YouTube playlist — is it public or unlisted?"; return; }
     if (!ok){
       state.tracks = FALLBACK_TRACKS.map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro" }));
       statusEl.textContent = "YouTube playlist loaded ✓ — song names are samples until the YouTube key is set, but the real songs play.";
     } else {
       statusEl.textContent = `YouTube playlist loaded ✓ ${state.tracks.length} songs`;
+    }
+  } else if (scUrl){
+    state.source = "soundcloud";
+    state.playlistUrl = scUrl; state.playlistId = "";
+    statusEl.textContent = "reading your SoundCloud playlist…";
+    try {
+      const resp = await fetch(`${API_BASE}/api/playlist?url=${encodeURIComponent(scUrl)}`);
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !(data.tracks || []).length) throw new Error(data.error || "couldn't read it");
+      state.playlistId = data.id || scUrl;
+      state.playlistTitle = data.title || "your SoundCloud mix";
+      state.tracks = data.tracks.map(t => ({ display:t.title, original:t.title, artist:t.artist, note:"", voiceMemoUrl:null, memoPosition:"intro", scId:t.scId || null, ytVideoId:null }));
+      statusEl.textContent = `SoundCloud playlist loaded ✓ ${state.tracks.length} songs`;
+    } catch(e){
+      statusEl.textContent = (e && e.message) || "couldn't read that SoundCloud playlist — is it public?";
+      return;
     }
   } else if (spotifyUrl){
     state.source = "spotify";
@@ -155,6 +181,7 @@ async function loadPlaylist(){
         }));
         statusEl.textContent = `loaded ✓ ${state.tracks.length} songs`;
       } catch(e){
+        if (!appConfig.sampleFallback){ statusEl.textContent = "couldn't read that playlist — is it public?"; return; }
         useFallbackTracks(statusEl);
         statusEl.textContent = "couldn't read that playlist (is it public?) — using sample songs so you can still play.";
       }
@@ -279,9 +306,19 @@ function openVoiceModal(idx){
   el("memo-position").value = t.memoPosition || "intro";
   const playback = el("voice-playback");
   if (t.voiceMemoUrl){ playback.src = t.voiceMemoUrl; playback.style.display = "block"; }
-  else { playback.style.display = "none"; playback.src = ""; }
+  else { playback.style.display = "none"; playback.removeAttribute("src"); }
+  el("btn-delete-memo").style.display = t.voiceMemoUrl ? "inline-block" : "none";
+  el("memo-max").textContent = appConfig.maxMemoSeconds || 20;
   el("record-timer").textContent = "0:00";
   el("voice-modal").classList.add("active");
+}
+function deleteMemo(){
+  const i = state.activeTrackIndex; if (i === null) return;
+  const t = state.tracks[i]; if (t.voiceMemoUrl) try { URL.revokeObjectURL(t.voiceMemoUrl); } catch(e){}
+  t.voiceMemoUrl = null; memoBlobs.delete(i);
+  const pb = el("voice-playback"); pb.pause(); pb.removeAttribute("src"); pb.style.display = "none";
+  el("btn-delete-memo").style.display = "none"; el("record-timer").textContent = "0:00";
+  renderBackTracklist(); if (deck) syncDeckTracks(); saveState();
 }
 function closeVoiceModal(){ el("voice-modal").classList.remove("active"); stopRecordingIfActive(); }
 function saveVoice(){
@@ -295,25 +332,38 @@ function saveVoice(){
   closeVoiceModal(); renderBackTracklist(); if (deck) syncDeckTracks(); saveState();
 }
 
-let recordStartTime = null;
+let recordStartTime = null, micStarting = false;
 async function toggleRecording(){
   const btn = el("btn-record");
   if (state.mediaRecorder && state.mediaRecorder.state === "recording"){ stopRecordingIfActive(); return; }
+  if (micStarting) return; // double-tap while the mic permission prompt is up
+  if (!navigator.mediaDevices || !window.MediaRecorder){ el("record-timer").textContent = "this browser can't record — try Chrome or Safari"; return; }
+  micStarting = true;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } });
+    micStarting = false;
+    const recIndex = state.activeTrackIndex; // the song this memo belongs to, even if the modal changes
     state.recordedChunks = [];
     const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) ? "audio/webm;codecs=opus"
                : (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/mp4")) ? "audio/mp4" : "";
-    const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const opts = { audioBitsPerSecond: 64000 }; if (mime) opts.mimeType = mime;
+    let mr; try { mr = new MediaRecorder(stream, opts); } catch(e){ mr = new MediaRecorder(stream); }
     state.mediaRecorder = mr;
-    mr.ondataavailable = (e) => state.recordedChunks.push(e.data);
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) state.recordedChunks.push(e.data); };
     mr.onstop = () => {
       const blob = new Blob(state.recordedChunks, { type: (mr.mimeType || mime || "audio/webm").split(";")[0] });
+      stream.getTracks().forEach(tr => tr.stop());
+      clearInterval(state.recordTimerInterval);
+      btn.classList.remove("recording"); btn.textContent = "🎙️ record";
+      if (blob.size < 1200){ el("record-timer").textContent = "that was too short — hold on a sec longer"; return; }
       const url = URL.createObjectURL(blob);
-      if (state.activeTrackIndex !== null){
-        state.tracks[state.activeTrackIndex].voiceMemoUrl = url;
-        memoBlobs.set(state.activeTrackIndex, blob);
+      if (recIndex !== null && state.tracks[recIndex]){
+        const old = state.tracks[recIndex].voiceMemoUrl; if (old) try { URL.revokeObjectURL(old); } catch(e){}
+        state.tracks[recIndex].voiceMemoUrl = url;
+        memoBlobs.set(recIndex, blob);
+        renderBackTracklist(); if (deck) syncDeckTracks();
       }
+      el("btn-delete-memo").style.display = "inline-block";
       const playback = el("voice-playback");
       playback.src = url; playback.style.display = "block";
       stream.getTracks().forEach(tr => tr.stop());
@@ -326,9 +376,9 @@ async function toggleRecording(){
     state.recordTimerInterval = setInterval(() => {
       const secs = Math.floor((Date.now() - recordStartTime)/1000);
       el("record-timer").textContent = `0:${secs.toString().padStart(2,"0")}`;
-      if (secs >= 20){ stopRecordingIfActive(); }
+      if (secs >= (appConfig.maxMemoSeconds || 20)){ stopRecordingIfActive(); }
     }, 250);
-  } catch(err){ el("record-timer").textContent = "mic access denied 🚫"; }
+  } catch(err){ micStarting = false; el("record-timer").textContent = "mic access denied 🚫 — allow the microphone in your browser settings"; }
 }
 function stopRecordingIfActive(){
   if (state.mediaRecorder && state.mediaRecorder.state === "recording"){ state.mediaRecorder.stop(); }
@@ -357,9 +407,11 @@ function syncDeckTracks(){
   deck.tracks.forEach((dt, i) => { const t = state.tracks[i]; if (t) Object.assign(dt, { display: t.display, note: t.note, memoPosition: t.memoPosition, memoUrl: t.voiceMemoUrl || null }); });
   deck.emit();
 }
-const LANE_NAMES = { spotify: "Spotify", youtube: "YouTube", preview: "previews" };
+const LANE_NAMES = { youtube: "YouTube", soundcloud: "SoundCloud", spotify: "Spotify", preview: "previews" };
 function startDeck(){
-  deck = new window.T4TDeck({ mount: el("deck-mount"), tracks: deckTracks(), source: state.source, apiBase: API_BASE, onChange: renderDeck });
+  deck = new window.T4TDeck({ mount: el("deck-mount"), tracks: deckTracks(), source: state.source, apiBase: API_BASE, onChange: renderDeck,
+    lanesAllowed: appConfig.lanes, defaultLane: appConfig.defaultLane || "youtube", scSearch: !!appConfig.soundcloudSearch });
+  deck.warm();
   const sw = el("lane-switch");
   sw.innerHTML = deck.lanes.length > 1 ? deck.lanes.map(l => `<button data-lane="${l}">${LANE_NAMES[l]}</button>`).join("") : "";
   qsa("button", sw).forEach(b => b.addEventListener("click", () => { deck.setLane(b.dataset.lane); deck.slot(b.dataset.lane); }));
@@ -375,7 +427,7 @@ function renderDeck(s){
   const prev = el("btn-preview-play"); if (prev) prev.textContent = playing ? "❚❚ pause" : "▶ listen";
   qsa(".shell-art-overlay-reel, #reel-left, #reel-right").forEach(r => r.classList.toggle("spinning", playing));
   const eq = el("eq-bars"); if (eq) eq.classList.toggle("playing", playing);
-  if (el("np-track")) el("np-track").textContent = s.memo ? "🎙️ your voice memo…" : (t ? t.display : "—");
+  if (el("np-track")) el("np-track").textContent = s.memo ? (t && t.memoPosition === "over-ad" ? `🎙️ you, over “${t.display}”` : "🎙️ your voice memo…") : (t ? t.display : "—");
   if (el("np-artist")) el("np-artist").textContent = t ? (t.artist || "") : "";
   if (el("deck-msg")){ el("deck-msg").textContent = s.message || ""; el("deck-msg").classList.toggle("nudge", !!s.needsTap); }
   qsa("#lane-switch button").forEach(b => b.classList.toggle("on", b.dataset.lane === s.lane));
@@ -433,12 +485,11 @@ function buildTapePayload(){
   return {
     senderName: (el("sender-name")?.value || "").trim(),
     recipientName: (el("recipient-name")?.value || "").trim(),
-    senderEmail: (el("sender-email")?.value || "").trim(),
     tapeTitle: state.tapeTitle, engraving: state.engraving, letter: state.letterText,
     playlist: state.playlistId ? { source: state.source, id: state.playlistId, title: state.playlistTitle } : null,
     tracks: state.tracks.map(t => ({
       original: t.original, display: t.display, artist: t.artist, note: t.note,
-      memoPosition: t.memoPosition, ytVideoId: t.ytVideoId || null,
+      memoPosition: t.memoPosition, ytVideoId: t.ytVideoId || null, scId: t.scId || null,
       spotifyId: t.spotifyId || null, previewUrl: t.previewUrl || null
     })),
     skin: state.skin, ink: state.ink, paper: state.paper, shell: state.shellShape,
@@ -462,19 +513,21 @@ function buildSendScreen(){
   try {
     const me = JSON.parse(localStorage.getItem("t4tmix.me.v1") || "{}");
     if (me.name && el("sender-name") && !el("sender-name").value) el("sender-name").value = me.name;
-    if (me.email && el("sender-email") && !el("sender-email").value) el("sender-email").value = me.email;
+    if (!me.name && session.user && session.user.name && el("sender-name") && !el("sender-name").value) el("sender-name").value = session.user.name;
   } catch(e){}
   if (currentSend){ renderQR(currentSend.url); setSendState("ready"); }
   else { el("qr-canvas-holder").innerHTML = '<div class="qr-placeholder">📼<br>your QR shows up here</div>'; setSendState("form"); }
+  el("signin-nudge").hidden = !!session.token || !appConfig.login;
   renderSentList();
 }
 async function sendTape(){
+  if (appConfig.maintenance || appConfig.newTapes === false){ setSendState("form", "😿 " + (appConfig.banner || "sending is paused for a moment — try again soon")); return; }
   const btn = el("btn-send-tape"); const label = btn.textContent;
   btn.disabled = true; btn.textContent = "wrapping it up…";
   setSendState("form", "");
   try {
     const tape = buildTapePayload();
-    localStorage.setItem("t4tmix.me.v1", JSON.stringify({ name: tape.senderName, email: tape.senderEmail }));
+    localStorage.setItem("t4tmix.me.v1", JSON.stringify({ name: tape.senderName }));
     const fd = new FormData();
     fd.append("tape", JSON.stringify(tape));
     memoBlobs.forEach((blob, i) => { if (i < state.tracks.length) fd.append(`memo_${i}`, blob, `memo-${i}`); });
@@ -483,7 +536,7 @@ async function sendTape(){
       if (!dataUrl) continue;
       const b = await shrinkImage(dataUrl); if (b) fd.append(field, b, `${field}.jpg`);
     }
-    const r = await fetch(`${API_BASE}/api/tape`, { method: "POST", body: fd });
+    const r = await fetch(`${API_BASE}/api/tape`, { method: "POST", body: fd, headers: authHeaders() });
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.ok) throw new Error(data.error || `couldn't save (${r.status})`);
     currentSend = data;
@@ -492,6 +545,9 @@ async function sendTape(){
     localStorage.setItem(LS_SENT, JSON.stringify(sent.slice(0, 50)));
     renderQR(data.url);
     el("send-link").textContent = data.url; el("send-link").href = data.url;
+    const memoCount = memoBlobs.size;
+    el("qr-note").textContent = (data.memos < memoCount ? `⚠️ ${memoCount - data.memos} voice memo(s) didn't make it — re-record and send again. ` : "") +
+      (data.linkedToAccount ? "saved to your account — we'll text you when they write back 💌" : "they scan it → unwrap your tape → hear the songs + your voice. they can write back once.");
     setSendState("ready", "");
     renderSentList();
   } catch(e){
@@ -511,12 +567,20 @@ function copyLink(){
     btn.textContent = "✅ copied!"; setTimeout(() => btn.textContent = original, 1600);
   }).catch(() => { window.prompt("copy this link:", currentSend.url); });
 }
-// "tapes you've sent" + reply check (replies are private to the sender's device)
+// "tapes you've sent" + reply check. Signed in → your account (every device).
+// Not signed in → this device only (owner tokens in localStorage).
 async function renderSentList(){
   const box = el("sent-list"); if (!box) return;
+  if (session.token){
+    const me = await refreshMe();
+    const tapes = (me && me.tapes) || [];
+    if (!tapes.length){ box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="panel-title">📬 tapes you\'ve sent</div>' + tapes.slice(0, 8).map(sentRowHtml).join("");
+    return;
+  }
   const sent = JSON.parse(localStorage.getItem(LS_SENT) || "[]");
   if (!sent.length){ box.innerHTML = ""; return; }
-  box.innerHTML = '<div class="panel-title">📬 tapes you\'ve sent</div>' + sent.slice(0, 8).map((s, i) =>
+  box.innerHTML = '<div class="panel-title">📬 tapes you\'ve sent <em>(this device)</em></div>' + sent.slice(0, 8).map((s, i) =>
     `<div class="sent-row" data-i="${i}"><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.title || "a mix")}</a>` +
     `<span class="sent-to">${s.to ? "for " + escapeHtml(s.to) : ""}</span><span class="sent-reply" id="reply-${escapeHtml(s.id)}">…</span></div>`
   ).join("");
@@ -527,20 +591,168 @@ async function renderSentList(){
       const d = await r.json();
       if (!r.ok){ slot.textContent = r.status === 404 ? "expired" : ""; continue; }
       if (!d.reply){ slot.textContent = "no reply yet"; continue; }
-      if (d.reply.type === "text"){ slot.textContent = "💌 " + d.reply.text; }
-      else {
-        slot.innerHTML = "";
-        const a = document.createElement("audio"); a.controls = true; a.preload = "none";
-        a.src = `${API_BASE}/api/media/${s.id}/${d.reply.audio}?owner=${encodeURIComponent(s.ownerToken)}`;
-        slot.append("💌 ", a);
-      }
+      slot.innerHTML = d.reply.link ? `<a class="reply-open" href="${escapeHtml(d.reply.link)}">💌 ${escapeHtml(d.reply.from || "they")} wrote back — open it</a>` : "💌 they wrote back";
     } catch(e){ slot.textContent = ""; }
   }
+}
+function sentRowHtml(t){
+  if (t.gone) return "";
+  const reply = t.reply
+    ? `<a class="reply-open${t.reply.seen ? "" : " unread"}" href="${escapeHtml(t.reply.link || "#")}">💌 ${escapeHtml(t.reply.from || "they")} wrote back${t.reply.type === "audio" ? " (voice)" : ""}${t.reply.seen ? "" : " · new"}</a>`
+    : '<span class="muted">no reply yet</span>';
+  return `<div class="sent-row"><a href="${escapeHtml(t.url)}" target="_blank" rel="noopener">${escapeHtml(t.title || "a mix")}</a>` +
+    `<span class="sent-to">${t.to ? "for " + escapeHtml(t.to) : ""}</span><span class="sent-reply">${reply}</span></div>`;
+}
+
+// ---------- RUNTIME CONFIG (set from /admin) ----------
+let appConfig = { lanes: { youtube:true, soundcloud:true, spotify:true, preview:true }, defaultLane: "youtube", login: false, feedback: true, donationUrl: "", donationLabel: "chip in", sampleFallback: true, maxMemoSeconds: 20 };
+async function loadConfig(){
+  try {
+    const r = await fetch(`${API_BASE}/api/config`);
+    if (r.ok) appConfig = Object.assign(appConfig, await r.json());
+  } catch(e){}
+  const banner = el("site-banner");
+  const msg = appConfig.banner || (appConfig.maintenance ? "T4T Mix is getting a quick tune-up — back in a moment 🔧" : "");
+  banner.hidden = !msg; banner.textContent = msg;
+  ["hero-donate", "send-donate", "fb-donate"].forEach(id => {
+    const a = el(id); if (!a) return;
+    a.hidden = !appConfig.donationUrl;
+    if (appConfig.donationUrl){ a.href = appConfig.donationUrl; if (id !== "fb-donate") a.textContent = "☕ " + (appConfig.donationLabel || "chip in"); }
+  });
+  qsa("[data-open-feedback]").forEach(b => b.hidden = !appConfig.feedback);
+  renderAccountBar();
+}
+
+// ---------- PHONE SIGN-IN ----------
+const session = { token: null, user: null, me: null };
+try { Object.assign(session, JSON.parse(localStorage.getItem(LS_SESSION) || "{}")); } catch(e){}
+function authHeaders(extra){ return Object.assign({}, extra || {}, session.token ? { authorization: `Bearer ${session.token}` } : {}); }
+function saveSession(){ try { localStorage.setItem(LS_SESSION, JSON.stringify({ token: session.token, user: session.user })); } catch(e){} }
+function renderAccountBar(){
+  el("btn-signin").hidden = !!session.token || !appConfig.login;
+  el("btn-inbox").hidden = !session.token;
+  const unread = session.me ? session.me.unread : 0;
+  el("inbox-badge").hidden = !unread; el("inbox-badge").textContent = unread;
+}
+async function refreshMe(){
+  if (!session.token) return null;
+  try {
+    const r = await fetch(`${API_BASE}/api/me`, { headers: authHeaders() });
+    if (r.status === 401){ session.token = null; session.user = null; session.me = null; saveSession(); renderAccountBar(); return null; }
+    const d = await r.json(); if (!r.ok) return null;
+    session.me = d; session.user = d.user; saveSession(); renderAccountBar();
+    return d;
+  } catch(e){ return null; }
+}
+let signinPhone = "";
+function openModal(id){ el(id).classList.add("active"); }
+function closeModal(node){ (node.closest ? node.closest(".modal-overlay") : node).classList.remove("active"); }
+function openSignin(){
+  el("signin-step-phone").hidden = false; el("signin-step-code").hidden = true; el("signin-status").textContent = "";
+  openModal("signin-modal"); setTimeout(() => el("signin-phone").focus(), 50);
+}
+async function sendCode(){
+  const btn = el("btn-send-code"); const phone = el("signin-phone").value.trim();
+  if (phone.replace(/\D/g, "").length < 10){ el("signin-status").textContent = "enter your full number (with area code)"; return; }
+  btn.disabled = true; el("signin-status").textContent = "sending…";
+  try {
+    const r = await fetch(`${API_BASE}/api/auth/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "couldn't send a code");
+    signinPhone = phone;
+    el("signin-sent-to").textContent = `we texted a code to ${d.phone}${d.dev ? " (dev mode — use the DEV_OTP code)" : ""}`;
+    el("signin-step-phone").hidden = true; el("signin-step-code").hidden = false; el("signin-status").textContent = "";
+    setTimeout(() => el("signin-code").focus(), 50);
+  } catch(e){ el("signin-status").textContent = "😿 " + e.message; }
+  finally { btn.disabled = false; }
+}
+async function verifyCode(){
+  const btn = el("btn-verify-code"); const code = el("signin-code").value.trim();
+  if (code.length < 4) return;
+  btn.disabled = true; el("signin-status").textContent = "checking…";
+  try {
+    const r = await fetch(`${API_BASE}/api/auth/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: signinPhone, code, name: el("signin-name").value.trim() }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "that didn't work");
+    session.token = d.token; session.user = d.user; saveSession();
+    // move tapes sent from this device (before signing in) into the account
+    const local = JSON.parse(localStorage.getItem(LS_SENT) || "[]");
+    if (local.length){
+      await fetch(`${API_BASE}/api/me/claim`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }),
+        body: JSON.stringify({ tapes: local.map(t => ({ id: t.id, ownerToken: t.ownerToken })) }) }).catch(() => {});
+    }
+    el("signin-status").textContent = "";
+    closeModal(el("signin-modal"));
+    await refreshMe(); renderAccountBar();
+    if (el("screen-send").classList.contains("active")) buildSendScreen();
+    if (pendingAfterSignin){ const f = pendingAfterSignin; pendingAfterSignin = null; f(); }
+  } catch(e){ el("signin-status").textContent = "😿 " + e.message; }
+  finally { btn.disabled = false; }
+}
+let pendingAfterSignin = null;
+async function openInbox(){
+  openModal("inbox-modal");
+  el("inbox-list").innerHTML = '<p class="muted">loading…</p>';
+  const me = await refreshMe();
+  if (!me){ closeModal(el("inbox-modal")); openSignin(); return; }
+  el("inbox-who").textContent = `signed in as ${me.user.name ? me.user.name + " · " : ""}${me.user.phone}`;
+  el("inbox-notify").checked = me.user.notify !== false;
+  el("inbox-list").innerHTML = me.tapes.length ? me.tapes.map(sentRowHtml).join("") : '<p class="muted">no tapes yet — go make one 📼</p>';
+}
+async function signOut(){
+  await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", headers: authHeaders() }).catch(() => {});
+  session.token = null; session.user = null; session.me = null; saveSession();
+  closeModal(el("inbox-modal")); renderAccountBar();
+}
+
+// ---------- FEEDBACK ----------
+let fbRating = "";
+function openFeedback(){
+  el("fb-form").hidden = false; el("fb-done").hidden = true; el("fb-status").textContent = "";
+  openModal("feedback-modal");
+}
+async function sendFeedback(){
+  const message = el("fb-message").value.trim();
+  if (message.length < 2 && !fbRating){ el("fb-status").textContent = "pick a face or write a little something 🙏"; return; }
+  const btn = el("btn-send-feedback"); btn.disabled = true;
+  try {
+    const r = await fetch(`${API_BASE}/api/feedback`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ message: message || `(${fbRating})`, rating: fbRating, contact: el("fb-contact").value.trim(), website: el("fb-website").value, page: (qs(".screen.active") || {}).id || "" }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "couldn't send");
+    el("fb-form").hidden = true; el("fb-done").hidden = false; el("fb-message").value = ""; fbRating = "";
+    qsa("#fb-rating button").forEach(b => b.classList.remove("on"));
+  } catch(e){ el("fb-status").textContent = "😿 " + e.message; }
+  finally { btn.disabled = false; }
 }
 
 // ---------- WIRE UP ----------
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
+  loadConfig();
+  if (session.token) refreshMe();
+
+  // account / sign-in / feedback
+  el("btn-signin").addEventListener("click", openSignin);
+  el("btn-nudge-signin").addEventListener("click", openSignin);
+  el("btn-inbox").addEventListener("click", openInbox);
+  el("btn-send-code").addEventListener("click", sendCode);
+  el("btn-verify-code").addEventListener("click", verifyCode);
+  el("signin-phone").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCode(); });
+  el("signin-code").addEventListener("input", (e) => { if (e.target.value.replace(/\D/g, "").length === 6) verifyCode(); });
+  el("btn-code-back").addEventListener("click", () => { el("signin-step-phone").hidden = false; el("signin-step-code").hidden = true; });
+  el("btn-signout").addEventListener("click", signOut);
+  el("inbox-notify").addEventListener("change", (e) => {
+    fetch(`${API_BASE}/api/me`, { method: "PATCH", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ notify: e.target.checked }) }).catch(() => {});
+  });
+  qsa("[data-open-feedback]").forEach(b => b.addEventListener("click", openFeedback));
+  qsa("#fb-rating button").forEach(b => b.addEventListener("click", () => {
+    fbRating = b.dataset.rating; qsa("#fb-rating button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+  el("btn-send-feedback").addEventListener("click", sendFeedback);
+  qsa("[data-close-modal]").forEach(b => b.addEventListener("click", () => closeModal(b)));
+  qsa(".modal-overlay").forEach(m => m.addEventListener("click", (e) => { if (e.target === m && m.id !== "voice-modal") m.classList.remove("active"); }));
+  el("btn-delete-memo").addEventListener("click", deleteMemo);
 
   el("btn-load").addEventListener("click", loadPlaylist);
 

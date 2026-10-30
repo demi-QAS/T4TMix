@@ -367,3 +367,11 @@ html.is-embed .room { padding-top: 16px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* v0.8 — banner + return envelope share row */
+.site-banner { position: sticky; top: 0; z-index: 50; background: #2b2036; color: #fff; text-align: center; font-size: 13px; padding: 8px 12px; }
+.reply-share { margin: 14px 0 10px; display: grid; gap: 10px; }
+.reply-share-row { display: flex; gap: 10px; justify-content: center; }
+.reply-share-row .pill { text-decoration: none; }
+
+[hidden]{display:none!important}

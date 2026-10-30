@@ -1,5 +1,5 @@
 {
-  // T4T Mix — ONE Worker: serves the sender app + recipient page (./public)
+  // T4T Mix v0.8 — ONE Worker: serves the sender app + recipient page (./public)
   // and the API (./src). Replaces the old cloudflare-worker/ + recipient-worker/ split.
   "$schema": "node_modules/wrangler/config-schema.json",
 
@@ -14,7 +14,7 @@
     "directory": "./public",
     "binding": "ASSETS",
     // API + recipient routes always hit the Worker code first.
-    "run_worker_first": ["/api/*", "/t/*", "/embed/*"]
+    "run_worker_first": ["/api/*", "/t/*", "/embed/*", "/r/*", "/admin", "/admin/"]
   },
 
   "vars": {
@@ -33,7 +33,14 @@
   // on the first deploy. After that, copy the KV id + bucket name from the dashboard into
   // here so every future deploy is pinned to the same storage.
   "kv_namespaces": [{ "binding": "TAPES" }],
-  "r2_buckets": [{ "binding": "MEDIA" }]
+  "r2_buckets": [{ "binding": "MEDIA" }],
+
+  // Real per-key rate limits (the edge-cache fallback doesn't work on *.workers.dev).
+  // namespace_id is any integer unique within your Cloudflare account.
+  "ratelimits": [
+    { "name": "RL_STRICT", "namespace_id": "4401", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_LOOSE",  "namespace_id": "4402", "simple": { "limit": 60, "period": 60 } }
+  ]
 
   // Reply-by-email is OFF until Email Routing is enabled on the t4tmix.com zone.
   // To turn it on, uncomment and list verified addresses (see docs/DEPLOY.md):

@@ -12,16 +12,19 @@
   const esc = (s) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const media = (f) => (f ? `/api/media/${TAPE_ID}/${encodeURIComponent(f)}` : null);
   let tape = null, deck = null;
+  let cfg = { lanes: { youtube: true, soundcloud: true, spotify: true, preview: true }, defaultLane: "youtube", replies: true, banner: "", donationUrl: "" };
 
-  const LANE_NAMES = { spotify: "Spotify", youtube: "YouTube", preview: "previews" };
+  const LANE_NAMES = { youtube: "YouTube", soundcloud: "SoundCloud", spotify: "Spotify", preview: "previews" };
   const LANE_FINE = {
     spotify: "full songs if you're logged in to Spotify in this browser — 30-second previews if not.",
-    youtube: "full songs. YouTube may play a short ad now and then.",
+    youtube: "full songs, no login. YouTube may play a short ad now and then.",
+    soundcloud: "full songs on SoundCloud (when the artist allows it) — no login.",
     preview: "30-second previews — no login needed.",
   };
 
   async function boot() {
     if (!TAPE_ID || TAPE_ID === "__TAPE_ID__") return;
+    try { const c = await fetch("/api/config"); if (c.ok) cfg = Object.assign(cfg, await c.json()); } catch (e) {}
     try {
       const r = await fetch(`/api/tape/${TAPE_ID}`, { headers: { accept: "application/json" } });
       if (!r.ok) throw new Error("not found");
@@ -66,7 +69,9 @@
       $("letterHead").textContent = t.senderName ? `a note from ${t.senderName}` : "a note for you";
       $("letterBody").textContent = t.letter;
     }
-    if (!t.hasReply) $("btnReply").hidden = false;
+    if (!t.hasReply && cfg.replies !== false) $("btnReply").hidden = false;
+    if (cfg.banner) { const b = $("siteBanner"); if (b) { b.hidden = false; b.textContent = cfg.banner; } }
+    $("replyToName").textContent = t.senderName || "them";
     renderSongs();
   }
 
@@ -117,7 +122,8 @@
     deck = new window.T4TDeck({
       mount: $("deckMount"),
       tracks,
-      source: (tape.playlist && tape.playlist.source) || "spotify",
+      source: (tape.playlist && tape.playlist.source) || "youtube",
+      lanesAllowed: cfg.lanes, defaultLane: cfg.defaultLane || "youtube", scSearch: !!cfg.soundcloudSearch,
       onChange: render,
     });
     renderLanes();
@@ -142,7 +148,8 @@
     room.classList.toggle("is-loading", !!s.loading);
     room.classList.toggle("is-memo", !!s.memo);
     $("btnPlay").setAttribute("aria-label", s.playing ? "pause" : "play");
-    $("nowKicker").textContent = s.memo ? "🎙️ a voice memo first…" : `track ${s.index + 1} of ${(tape.tracks || []).length}`;
+    const who = tape.senderName || "they";
+    $("nowKicker").textContent = s.memo ? (t && t.memoPosition === "over-ad" ? `🎙️ ${who}, talking over this one…` : t && t.memoPosition === "outro" ? `🎙️ ${who} has something to add…` : `🎙️ ${who} first…`) : `track ${s.index + 1} of ${(tape.tracks || []).length}`;
     $("nowSong").textContent = t ? (t.display || t.original) : "no songs on this tape";
     $("nowArtist").textContent = t ? (t.artist || "") : "";
     const renamed = t && t.original && t.display && t.original !== t.display;
@@ -201,11 +208,13 @@
         clearInterval(rec.iv); stream.getTracks().forEach((x) => x.stop());
         const type = (r.mimeType || mime || "audio/webm").split(";")[0];
         const blob = new Blob(chunks, { type });
+        if (blob.size < 1200) { $("recTimer").textContent = "too short — try again"; $("recBtn").classList.remove("on"); $("recBtn").textContent = "●"; return; }
         $("recPlayback").src = URL.createObjectURL(blob); $("recPlayback").hidden = false;
         $("recBtn").classList.remove("on"); $("recBtn").textContent = "●";
         payload = { kind: "voice", blob, type }; $("replySend").disabled = false;
       };
-      rec = { r, iv: setInterval(() => { s++; $("recTimer").textContent = `0:${String(s).padStart(2, "0")} / 0:20`; if (s >= 20) r.stop(); }, 1000) };
+      const max = cfg.maxMemoSeconds || 20;
+      rec = { r, iv: setInterval(() => { s++; $("recTimer").textContent = `0:${String(s).padStart(2, "0")} / 0:${max}`; if (s >= max && r.state === "recording") r.stop(); }, 1000) };
       r.start(); $("recBtn").classList.add("on"); $("recBtn").textContent = "■";
     } catch (e) { $("recTimer").textContent = "mic is blocked — try writing instead"; }
   }
@@ -216,13 +225,25 @@
       const fd = new FormData();
       fd.append("kind", payload.kind);
       fd.append("from", $("replyFrom").value.trim());
+      if (payload.kind === "voice" && $("replyText").value.trim()) fd.append("text", $("replyText").value.trim());
       if (payload.kind === "text") fd.append("text", payload.text);
       else fd.append("audio", payload.blob, `reply.${payload.type.includes("mp4") ? "mp4" : "webm"}`);
       const r = await fetch(`/api/tape/${TAPE_ID}/reply`, { method: "POST", body: fd });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || "couldn't send");
       $("replyForm").hidden = true; $("replyDone").hidden = false; $("btnReply").hidden = true;
-      setTimeout(() => close($("replySheet")), 2200);
+      $("replyDoneSub").textContent = d.senderNotified
+        ? `${tape.senderName || "they"} just got a text — it's on its way 💌`
+        : `want to be sure ${tape.senderName || "they"} sees it? send them this link 👇`;
+      const link = d.replyUrl;
+      $("replyShareRow").hidden = !link;
+      $("replyShare").onclick = () => {
+        const text = `I wrote back to your mixtape “${tape.tapeTitle || "a mix"}” 💌`;
+        if (navigator.share) navigator.share({ title: "I wrote back", text, url: link }).catch(() => {});
+        else navigator.clipboard.writeText(link).then(() => { $("replyShare").textContent = "✅ link copied"; }).catch(() => prompt("copy this link:", link));
+      };
+      $("replyCopy").onclick = () => navigator.clipboard.writeText(link).then(() => { $("replyCopy").textContent = "✅ copied"; }).catch(() => prompt("copy this link:", link));
+      $("replySms").href = `sms:?&body=${encodeURIComponent(`I wrote back to your mixtape 💌 ${link}`)}`;
     } catch (e) {
       btn.disabled = false; btn.textContent = "send it";
       $("recTimer").textContent = e.message || "couldn't send — try again";

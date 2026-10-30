@@ -15,6 +15,13 @@
 <body>
 
 <div class="bg-blobs" aria-hidden="true"></div>
+<div class="site-banner" id="site-banner" hidden></div>
+
+<!-- ============ ACCOUNT BAR ============ -->
+<div class="account-bar" id="account-bar">
+  <button class="acct-btn" id="btn-inbox" hidden>📬 my tapes <span class="badge" id="inbox-badge" hidden>0</span></button>
+  <button class="acct-btn" id="btn-signin" hidden>📱 sign in</button>
+</div>
 
 <!-- ============ SCREEN 1: HERO ============ -->
 <section id="screen-hero" class="screen active">
@@ -27,20 +34,29 @@
     <p class="subtagline">no gatekeeping, just good taste. paste a playlist, write on the tape, send the whole feeling.</p>
 
     <div class="link-card">
-      <label class="link-label">🎧 Spotify playlist link</label>
-      <input id="spotify-input" type="text" placeholder="https://open.spotify.com/playlist/…" />
-      <label class="link-label soon">▶️ YouTube / YouTube Music link <span class="soon-badge">live playback</span></label>
-      <input id="ytm-input" type="text" placeholder="paste a YouTube Music / YouTube playlist link..." />
+      <label class="link-label">▶️ YouTube / YouTube Music playlist <span class="soon-badge">full songs</span></label>
+      <input id="ytm-input" type="url" inputmode="url" placeholder="https://youtube.com/playlist?list=…" />
+      <label class="link-label">☁️ SoundCloud playlist (set)</label>
+      <input id="sc-input" type="url" inputmode="url" placeholder="https://soundcloud.com/artist/sets/…" />
+      <label class="link-label">🎧 Spotify playlist</label>
+      <input id="spotify-input" type="url" inputmode="url" placeholder="https://open.spotify.com/playlist/…" />
       <button id="btn-load" class="btn-primary">Load my playlist →</button>
-      <div id="load-status" class="load-status"></div>
+      <div id="load-status" class="load-status" role="status"></div>
     </div>
 
     <p class="honesty-note">
-      💌 heads up: Spotify tapes play <strong>full songs</strong> if the person you send it to is signed in to Spotify in their browser, otherwise 30-second previews.
-      They can switch to YouTube for full songs (it may play a short ad). Your voice memos play either way.
+      💌 every tape plays on <strong>YouTube</strong> first — full songs, no login (sometimes a short ad).
+      The person you send it to can switch to SoundCloud or Spotify if they like. Your voice memos play either way.
     </p>
 
-    <div class="freemium-badge">🎁 2 mixtapes free — then just $2 to send more</div>
+    <div class="launch-card" id="launch-card">
+      <p class="launch-title">🧪 T4T Mix is brand new</p>
+      <p class="launch-sub">it's free. if it made you smile, tell me what to fix — or chip in to keep the tapes rolling.</p>
+      <div class="launch-actions">
+        <button class="btn-secondary" data-open-feedback>💬 give feedback</button>
+        <a class="btn-donate" id="hero-donate" href="#" target="_blank" rel="noopener" hidden>☕ chip in</a>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -152,7 +168,7 @@
     <label class="modal-label">what does this song make you think of?</label>
     <textarea id="track-note-text" rows="2" placeholder="this is the song from that road trip..."></textarea>
 
-    <label class="modal-label">voice memo — plays as an intro before the track (max 20s)</label>
+    <label class="modal-label">voice memo — your voice on this song (max <span id="memo-max">20</span>s)</label>
     <div class="voice-recorder">
       <button id="btn-record" class="btn-record">🎙️ record</button>
       <span id="record-timer">0:00</span>
@@ -160,11 +176,12 @@
         <select id="memo-position">
           <option value="intro">plays BEFORE the song</option>
           <option value="outro">plays AFTER the song</option>
-          <option value="over-ad">plays over any ad, then the song</option>
+          <option value="over-ad">talks OVER the start of the song</option>
         </select>
       </label>
     </div>
     <audio id="voice-playback" controls style="display:none; width:100%; margin-top:8px;"></audio>
+    <button id="btn-delete-memo" class="btn-ghost small" style="display:none;">🗑 remove this memo</button>
     <button id="btn-save-voice" class="btn-primary btn-wide">save to this track</button>
   </div>
 </div>
@@ -234,8 +251,6 @@
         <option value="nightstand">nightstand by the window</option>
         <option value="car">car, rain on the glass</option>
       </select></label>
-    <label class="send-field"><span>your email <em>(optional — only if reply emails are switched on)</em></span>
-      <input id="sender-email" type="email" maxlength="120" autocomplete="email" placeholder="you@you.com"></label>
     <button id="btn-send-tape" class="btn-primary btn-wide">💌 make my QR</button>
     <p class="send-status" id="send-status" role="status"></p>
   </div>
@@ -246,14 +261,85 @@
       <button id="btn-share" class="btn-primary btn-wide">📤 Share it</button>
       <button id="btn-copy" class="btn-secondary btn-wide">🔗 Copy link</button>
     </div>
-    <p class="qr-honesty-note">they scan it → unwrap your tape → hear the songs + your voice. they can write back once. tapes keep for ~6 months.</p>
+    <p class="qr-honesty-note" id="qr-note">they scan it → unwrap your tape → hear the songs + your voice. they can write back once. tapes keep for ~6 months.</p>
   </div>
 
-  <div class="freemium-badge center">🎁 2 mixtapes free a month — then just $2 (coming soon)</div>
+  <div class="signin-nudge" id="signin-nudge" hidden>
+    <p>📱 <strong>sign in with your phone</strong> so their reply finds you — we'll text you the moment they write back, and your tapes follow you to any device.</p>
+    <button class="btn-secondary" id="btn-nudge-signin">sign in</button>
+  </div>
   <div id="sent-list" class="sent-list"></div>
+  <div class="launch-card small">
+    <p class="launch-sub">free while it's new 💛 how was making this tape?</p>
+    <div class="launch-actions">
+      <button class="btn-secondary" data-open-feedback>💬 feedback</button>
+      <a class="btn-donate" id="send-donate" href="#" target="_blank" rel="noopener" hidden>☕ chip in</a>
+    </div>
+  </div>
 
   <button id="btn-back-to-player" class="btn-ghost">← back to player</button>
 </section>
+
+<!-- ============ SIGN IN ============ -->
+<div id="signin-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div id="signin-step-phone">
+      <div class="modal-track-name">sign in with your phone</div>
+      <p class="modal-sub">we text you a code. no passwords. your number is only used to sign you in and to tell you when someone writes back.</p>
+      <label class="modal-label">phone number</label>
+      <input id="signin-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(202) 555-0123" />
+      <label class="modal-label">your name <em>(optional)</em></label>
+      <input id="signin-name" type="text" maxlength="40" autocomplete="nickname" placeholder="what friends call you" />
+      <button id="btn-send-code" class="btn-primary btn-wide">text me a code</button>
+    </div>
+    <div id="signin-step-code" hidden>
+      <div class="modal-track-name">check your texts 💬</div>
+      <p class="modal-sub" id="signin-sent-to">we sent a code</p>
+      <input id="signin-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" class="code-input" />
+      <button id="btn-verify-code" class="btn-primary btn-wide">sign in</button>
+      <button id="btn-code-back" class="btn-ghost small">use a different number</button>
+    </div>
+    <p class="send-status" id="signin-status" role="status"></p>
+  </div>
+</div>
+
+<!-- ============ MY TAPES / INBOX ============ -->
+<div id="inbox-modal" class="modal-overlay">
+  <div class="modal-card inbox-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div class="modal-track-name">📬 my tapes</div>
+    <p class="modal-sub" id="inbox-who"></p>
+    <div id="inbox-list" class="inbox-list"></div>
+    <label class="toggle-row"><input type="checkbox" id="inbox-notify" checked> text me when someone writes back</label>
+    <button id="btn-signout" class="btn-ghost small">sign out</button>
+  </div>
+</div>
+
+<!-- ============ FEEDBACK ============ -->
+<div id="feedback-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div id="fb-form">
+      <div class="modal-track-name">how's T4T Mix treating you?</div>
+      <div class="fb-rating" id="fb-rating">
+        <button data-rating="love">😍<span>love it</span></button>
+        <button data-rating="like">🙂<span>it's nice</span></button>
+        <button data-rating="meh">😐<span>meh</span></button>
+        <button data-rating="broken">🛠️<span>something broke</span></button>
+      </div>
+      <label class="modal-label">tell me anything — bugs, wishes, feelings</label>
+      <textarea id="fb-message" rows="4" maxlength="2000" placeholder="the voice memo thing made me cry. also the heart player…"></textarea>
+      <label class="modal-label">how can I reach you? <em>(optional)</em></label>
+      <input id="fb-contact" type="text" maxlength="120" placeholder="email, IG, phone…" />
+      <input id="fb-website" type="text" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+      <button id="btn-send-feedback" class="btn-primary btn-wide">send it 💌</button>
+      <a class="btn-donate wide" id="fb-donate" href="#" target="_blank" rel="noopener" hidden>☕ or chip in to keep it free</a>
+    </div>
+    <div id="fb-done" hidden class="fb-done"><p class="big">💛</p><p>thank you — I read every one.</p></div>
+    <p class="send-status" id="fb-status" role="status"></p>
+  </div>
+</div>
 
 <script src="vendor/qrcode.js"></script>
 <script src="player.js"></script>
