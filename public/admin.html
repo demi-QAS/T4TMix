@@ -106,6 +106,14 @@
     </div>
 
 
+
+    <section class="card" id="phonecheck">
+      <h2>📱 phone sign-in check</h2>
+      <p class="muted" style="margin-top:0">checks your Twilio settings without showing them. run it after adding or changing a secret (and after deploying).</p>
+      <div class="flex"><button class="hot" id="runTwilio">run check</button></div>
+      <div id="twilioOut" style="margin-top:12px"></div>
+    </section>
+
     <section class="card" id="access">
       <h2>🔑 access codes (free beta gate)</h2>
       <div class="grid">
@@ -291,6 +299,23 @@
     const tg = e.target.closest("[data-toggle]"); if (tg) return api(`codes/${key}`, { method: "PATCH", body: JSON.stringify({ off: tg.dataset.toggle === "off" }) }).then(loadCodes).catch((er) => toast(er.message));
     if (e.target.closest("[data-delcode]") && confirm("delete this code? people who already used it stay in.")) api(`codes/${key}`, { method: "DELETE" }).then(loadCodes).catch((er) => toast(er.message));
   });
+
+  $("runTwilio").onclick = async () => {
+    const o = $("twilioOut"); o.innerHTML = '<span class="muted">checking…</span>';
+    try {
+      const d = await api("twilio-check");
+      const line = (good, txt) => `<div style="padding:5px 0">${good ? '<span class="pill on">✓</span>' : '<span class="pill off">✗</span>'} ${txt}</div>`;
+      let h = "";
+      ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SID", "PHONE_PEPPER"].forEach((k) => {
+        h += line(!d.missing.includes(k), `<span class="mono">${k}</span> ${d.missing.includes(k) ? "— <b>not reaching the app</b>. add it as a Secret on the <b>t4tmix</b> worker (exact name, all caps), then deploy." : "is set"}`);
+      });
+      d.shape.forEach((t) => { h += line(false, esc(t)); });
+      if (d.twilio) h += line(d.twilio.ok, d.twilio.ok ? `Twilio accepted your keys (service: ${esc(d.twilio.service)})` : esc(d.twilio.why));
+      h += line(d.loginSwitch, d.loginSwitch ? "phone sign-in switch is on" : "phone sign-in switch is OFF — flip it on under switches");
+      if (d.twilio && d.twilio.ok && d.loginSwitch) h += '<p style="margin:10px 0 0">✅ all good. the sign-in button shows up on the site within a minute. on a Twilio trial account, only numbers you verified in Twilio can get codes.</p>';
+      o.innerHTML = h;
+    } catch (e) { o.textContent = "😿 " + e.message; }
+  };
   $("enter").onclick = enter; $("tok").onkeydown = (e) => { if (e.key === "Enter") enter(); };
   $("lock").onclick = lock; $("refresh").onclick = enter;
   document.querySelectorAll("[data-k]").forEach((i) => i.addEventListener("change", () => {

@@ -62,6 +62,30 @@ export async function handleAdmin(req, env, path) {
     if (r) return r;
   }
 
+
+  // ---- phone sign-in check: which Twilio settings are missing, and does Twilio accept them? ----
+  if (path === "twilio-check" && M === "GET") {
+    const need = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SID", "PHONE_PEPPER"];
+    const missing = need.filter((k) => !env[k] || !String(env[k]).trim());
+    const shape = [];
+    const sid = String(env.TWILIO_ACCOUNT_SID || "").trim(), vsid = String(env.TWILIO_VERIFY_SID || "").trim();
+    if (sid && !/^AC[0-9a-fA-F]{32}$/.test(sid)) shape.push(sid.startsWith("VA") ? "TWILIO_ACCOUNT_SID starts with VA — that's the Verify SID. The Account SID starts with AC." : "TWILIO_ACCOUNT_SID should be AC + 32 letters/numbers (check for a space or missing character).");
+    if (vsid && !/^VA[0-9a-fA-F]{32}$/.test(vsid)) shape.push(vsid.startsWith("AC") ? "TWILIO_VERIFY_SID starts with AC — that's the Account SID. The Verify Service SID starts with VA." : "TWILIO_VERIFY_SID should be VA + 32 letters/numbers (Twilio Console → Verify → Services).");
+    const out = { ok: true, missing, shape, loginSwitch: (await getConfig(env, true)).login, twilio: null };
+    if (!missing.filter((k) => k !== "PHONE_PEPPER").length && !shape.length) {
+      try {
+        const r = await fetch(`https://verify.twilio.com/v2/Services/${vsid}`, {
+          headers: { authorization: "Basic " + btoa(`${sid}:${String(env.TWILIO_AUTH_TOKEN).trim()}`) } });
+        const d = await r.json().catch(() => ({}));
+        out.twilio = r.ok ? { ok: true, service: d.friendly_name || "Verify service" }
+          : { ok: false, status: r.status, why: r.status === 401 ? "Twilio rejected the Account SID / Auth Token pair — re-copy the Auth Token (it changes if you reset it)."
+            : r.status === 404 ? "Twilio can't find that Verify Service SID on this account — copy it again from Verify → Services."
+            : (d.message || "Twilio returned an error") };
+      } catch (e) { out.twilio = { ok: false, why: "couldn't reach Twilio from Cloudflare — try again" }; }
+    }
+    return j(out);
+  }
+
   if (path === "overview" && M === "GET") {
     const cfg = await getConfig(env, true);
     return j({ ok: true, config: cfg, defaults: DEFAULT_CONFIG, stats: await stats(env), features: {

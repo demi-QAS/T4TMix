@@ -27,3 +27,9 @@
 - `?code=XXXX` links pre-fill the code; unlocks saved per device (1 year) and on signed-in accounts
 - Sending a tape now requires access when the gate is on; gift + reply links stay open
 - Tests: `npm run test:gate` (20 checks)
+
+## 0.9.1 — sign-in troubleshooting
+- `/admin` → "phone sign-in check": shows which Twilio secrets reach the app, catches swapped AC/VA SIDs, and asks Twilio whether it accepts the keys (values are never shown)
+- Pasted secrets are trimmed (stray spaces/newlines no longer break sign-in)
+- Clearer messages when Twilio refuses a number (e.g. trial accounts can only text verified numbers)
+- `keep_vars: true` in wrangler.jsonc so deploys don't wipe dashboard variables

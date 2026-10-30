@@ -148,7 +148,7 @@ export async function saveConfig(env, patch) {
   cfgCache = next; cfgAt = Date.now();
   return next;
 }
-export const smsReady = (env) => !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_VERIFY_SID) || !!env.DEV_OTP;
+export const smsReady = (env) => !!(String(env.TWILIO_ACCOUNT_SID || "").trim() && String(env.TWILIO_AUTH_TOKEN || "").trim() && String(env.TWILIO_VERIFY_SID || "").trim()) || !!env.DEV_OTP;
 export function publicConfig(cfg, env) {
   return {
     maintenance: cfg.maintenance, banner: cfg.banner,

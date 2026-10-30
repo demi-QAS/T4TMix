@@ -27,7 +27,7 @@ import { authStart, authVerify, authLogout, getMe, patchMe, claimTapes, getUser,
 import { handleAdmin } from "./admin.js";
 import { hasAccess, gateError, redeem, accessStatus } from "./access.js";
 
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 
 // ---------- tapes ----------
 const MEDIA_FILE = /^(memo-\d{1,3}\.(webm|ogg|mp4|m4a)|(cover|shell|window)\.(jpg|png|webp|gif)|reply\.(webm|ogg|mp4|m4a))$/;

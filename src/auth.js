@@ -41,11 +41,12 @@ function isLocal(req) {
   return h === "localhost" || h === "127.0.0.1";
 }
 
+const tv = (v) => String(v || "").trim(); // pasted secrets often carry a stray space or newline
 async function twilio(env, path, form) {
-  const r = await fetch(`https://verify.twilio.com/v2/Services/${env.TWILIO_VERIFY_SID}/${path}`, {
+  const r = await fetch(`https://verify.twilio.com/v2/Services/${tv(env.TWILIO_VERIFY_SID)}/${path}`, {
     method: "POST",
     headers: {
-      authorization: "Basic " + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+      authorization: "Basic " + btoa(`${tv(env.TWILIO_ACCOUNT_SID)}:${tv(env.TWILIO_AUTH_TOKEN)}`),
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(form).toString(),
@@ -73,8 +74,13 @@ export async function authStart(req, env) {
   if (!devMode) {
     const r = await twilio(env, "Verifications", { To: phone, Channel: "sms" });
     if (!r.ok) {
-      console.error("twilio start", r.status, r.data && r.data.message);
-      return err(r.status === 400 ? "we couldn't text that number" : "couldn't send a code right now", r.status === 400 ? 400 : 502);
+      console.error("twilio start", r.status, r.data && r.data.code, r.data && r.data.message);
+      const c = r.data && r.data.code;
+      // 21608 / 21614 / 60205: trial accounts can only text verified numbers, or the number can't get SMS
+      if (c === 21608 || c === 60205 || /unverified|trial/i.test((r.data && r.data.message) || ""))
+        return err("this number can't get texts from us yet — T4T Mix is still in its trial setup. try again soon 💛", 400);
+      if (r.status === 401 || r.status === 404) return err("sign-in is having a hiccup on our end — try again later", 502);
+      return err(r.status === 400 ? "we couldn't text that number — double-check it?" : "couldn't send a code right now", r.status === 400 ? 400 : 502);
     }
   }
   await env.TAPES.put(`otp:${ph}`, JSON.stringify({ sentAt: Date.now(), sends: (prev ? prev.sends : 0) + 1, tries: 0 }), { expirationTtl: 600 });

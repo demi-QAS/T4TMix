@@ -42,3 +42,9 @@ The site opens on a cover page. To make tapes, people type an access code. **Gif
 - Turning "require an access code" off opens the site to everyone instantly.
 - Honest limits: anyone holding the survey code can get in without taking the survey (it's an honor-system gate, not proof). One-time codes are the strict option.
 - "Codes used" appears in the 14-day stats.
+
+
+## Cloudflare says "update your wrangler with these vars"?
+Cloudflare suggests this when you add a value in the dashboard as a plain **Text** variable. Do **not** paste Twilio values into `wrangler.jsonc`, because the repo is public. Instead:
+- Re-add each Twilio / admin value as type **Secret** (Settings → Variables and Secrets), then delete the Text version.
+- `keep_vars: true` is already set, so deploys won't erase anything you add in the dashboard.
