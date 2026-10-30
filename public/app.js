@@ -21,7 +21,8 @@ const FALLBACK_PLAYLIST_TITLE = "Jack O'Lantern - Goodbye Playlist ✈️🌍 �
 const API_BASE = (window.T4T_API_BASE || "").replace(/\/$/, "");
 const LS_SENT = "t4tmix.sent.v1";       // [{ id, url, ownerToken, title, at }]
 const LS_PHOTOS = "t4tmix.photos.v1";
-const LS_SESSION = "t4tmix.session.v1";  // phone sign-in token   // photos kept separate so a big photo can't wipe the rest of your tape
+const LS_SESSION = "t4tmix.session.v1";
+const LS_PASS = "t4tmix.pass.v1";      // access pass from the free-beta access code  // phone sign-in token   // photos kept separate so a big photo can't wipe the rest of your tape
 // Voice memos live in memory as Blobs until Send (blob: URLs die on reload anyway).
 const memoBlobs = new Map();            // trackIndex -> Blob
 
@@ -538,6 +539,7 @@ async function sendTape(){
     }
     const r = await fetch(`${API_BASE}/api/tape`, { method: "POST", body: fd, headers: authHeaders() });
     const data = await r.json().catch(() => ({}));
+    if (r.status === 402 && data.gate){ try { localStorage.removeItem(LS_PASS); } catch(e){} showGate(); throw new Error("enter your access code, then hit send again — your tape is still here"); }
     if (!r.ok || !data.ok) throw new Error(data.error || `couldn't save (${r.status})`);
     currentSend = data;
     const sent = JSON.parse(localStorage.getItem(LS_SENT) || "[]");
@@ -621,12 +623,86 @@ async function loadConfig(){
   });
   qsa("[data-open-feedback]").forEach(b => b.hidden = !appConfig.feedback);
   renderAccountBar();
+  await checkAccess();
+}
+
+
+// ---------- ACCESS GATE (free beta cover page) ----------
+function accessPass(){ try { return localStorage.getItem(LS_PASS) || ""; } catch(e){ return ""; } }
+let gateOpen = false;
+function paintGate(){
+  const survey = appConfig.surveyUrl || "";
+  const sv = el("gate-survey");
+  sv.hidden = !survey; sv.href = survey || "#";
+  el("gate-survey-link").textContent = survey.replace(/^https?:\/\//, "");
+  el("gate-survey-note").textContent = appConfig.gateSurveyNote || "";
+  const v = appConfig.venmo || "";
+  el("gate-venmo-card").hidden = !v;
+  el("gate-venmo-handle").textContent = v ? "@" + v : "";
+  el("gate-venmo").href = v ? `https://venmo.com/u/${encodeURIComponent(v)}` : "#";
+  el("gate-donate-note").textContent = appConfig.gateDonateNote || "";
+  el("gate-signin").hidden = !appConfig.login || !!session.token;
+}
+function showGate(){
+  if (gateOpen){ paintGate(); return; }
+  gateOpen = true; paintGate();
+  const g = el("gate"); g.classList.remove("opening"); g.hidden = false;
+  document.body.classList.add("gated");
+  // a code in the link (…/?code=MIX-ABC123) fills itself in
+  const pre = new URLSearchParams(location.search).get("code");
+  if (pre){ el("gate-code").value = pre; }
+}
+function hideGate(animate){
+  const g = el("gate");
+  document.body.classList.remove("gated");
+  gateOpen = false;
+  if (!animate){ g.hidden = true; return; }
+  g.classList.add("opening");
+  setTimeout(() => { g.hidden = true; g.classList.remove("opening"); }, 800);
+}
+async function checkAccess(){
+  if (!appConfig.gate){ hideGate(false); return true; }
+  const hasLocal = !!accessPass() || !!(session.user && session.user.access);
+  if (!hasLocal){ showGate(); return false; }
+  try {
+    const r = await fetch(`${API_BASE}/api/access`, { headers: authHeaders() });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.access){ hideGate(false); return true; }
+    if (r.ok && !d.access){ try { localStorage.removeItem(LS_PASS); } catch(e){} showGate(); return false; }
+  } catch(e){}
+  hideGate(false); return true; // offline / server hiccup: don't lock people out — sending still checks
+}
+async function redeemCode(e){
+  if (e) e.preventDefault();
+  const input = el("gate-code"), msg = el("gate-msg"), btn = el("gate-go"), tape = el("gate-form");
+  const code = input.value.trim();
+  msg.classList.remove("ok");
+  if (code.replace(/[^A-Za-z0-9]/g, "").length < 4){ msg.textContent = "type the code you got first ✍️"; input.focus(); return; }
+  btn.disabled = true; btn.textContent = "checking…"; msg.textContent = ""; tape.classList.add("spinning");
+  try {
+    const r = await fetch(`${API_BASE}/api/access`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ code }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.pass) throw new Error(d.error || "that code didn't work");
+    try { localStorage.setItem(LS_PASS, d.pass); } catch(e){}
+    if (session.user) session.user.access = true;
+    msg.classList.add("ok"); msg.textContent = "you're in. welcome to the beta 💛";
+    btn.textContent = "▶ playing…";
+    if (location.search.includes("code=")) history.replaceState(null, "", location.pathname);
+    setTimeout(() => { tape.classList.remove("spinning"); hideGate(true); }, 900);
+  } catch(err){
+    tape.classList.remove("spinning"); tape.classList.remove("shake"); void tape.offsetWidth; tape.classList.add("shake");
+    msg.textContent = err.message;
+    btn.textContent = "▶ press play";
+  } finally { btn.disabled = false; }
 }
 
 // ---------- PHONE SIGN-IN ----------
 const session = { token: null, user: null, me: null };
 try { Object.assign(session, JSON.parse(localStorage.getItem(LS_SESSION) || "{}")); } catch(e){}
-function authHeaders(extra){ return Object.assign({}, extra || {}, session.token ? { authorization: `Bearer ${session.token}` } : {}); }
+function authHeaders(extra){
+  const pass = accessPass();
+  return Object.assign({}, extra || {}, session.token ? { authorization: `Bearer ${session.token}` } : {}, pass ? { "x-t4t-pass": pass } : {});
+}
 function saveSession(){ try { localStorage.setItem(LS_SESSION, JSON.stringify({ token: session.token, user: session.user })); } catch(e){} }
 function renderAccountBar(){
   el("btn-signin").hidden = !!session.token || !appConfig.login;
@@ -684,6 +760,7 @@ async function verifyCode(){
     el("signin-status").textContent = "";
     closeModal(el("signin-modal"));
     await refreshMe(); renderAccountBar();
+    if (gateOpen){ const ok = await checkAccess(); if (!ok){ paintGate(); el("gate-msg").classList.remove("ok"); el("gate-msg").textContent = "you're signed in — now enter your code once and it's saved to your account."; } }
     if (el("screen-send").classList.contains("active")) buildSendScreen();
     if (pendingAfterSignin){ const f = pendingAfterSignin; pendingAfterSignin = null; f(); }
   } catch(e){ el("signin-status").textContent = "😿 " + e.message; }
@@ -729,6 +806,8 @@ async function sendFeedback(){
 // ---------- WIRE UP ----------
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
+  // no pass on this device → show the cover right away (no flash of the app); config decides after
+  if (!accessPass() && !(session.user && session.user.access)) showGate();
   loadConfig();
   if (session.token) refreshMe();
 
@@ -755,6 +834,15 @@ document.addEventListener("DOMContentLoaded", () => {
   el("btn-delete-memo").addEventListener("click", deleteMemo);
 
   el("btn-load").addEventListener("click", loadPlaylist);
+  el("gate-form").addEventListener("submit", redeemCode);
+  el("gate-code").addEventListener("input", () => { el("gate-msg").textContent = ""; });
+  el("gate-signin").addEventListener("click", openSignin);
+  el("gate-venmo-copy").addEventListener("click", async () => {
+    const h = "@" + (appConfig.venmo || "");
+    try { await navigator.clipboard.writeText(h); el("gate-venmo-copy").textContent = "copied ✓"; }
+    catch(e){ el("gate-venmo-copy").textContent = h; }
+    setTimeout(() => { el("gate-venmo-copy").textContent = "copy handle"; }, 1800);
+  });
 
   // Handwritten title
   const titleEl = el("handwritten-title");

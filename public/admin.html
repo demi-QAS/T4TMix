@@ -105,6 +105,33 @@
       </section>
     </div>
 
+
+    <section class="card" id="access">
+      <h2>🔑 access codes (free beta gate)</h2>
+      <div class="grid">
+        <div>
+          <label class="row"><div>require an access code<small>off = anyone can make tapes. gift links + reply links always open.</small></div><span class="switch"><input type="checkbox" data-k="gate"><span></span></span></label>
+          <label class="row" style="display:block"><div>survey link<small>shown as option 1 on the cover page</small></div></label>
+          <input type="url" id="surveyUrl" placeholder="https://bit.ly/…" />
+          <label class="row" style="display:block"><div>survey note</div></label>
+          <input type="text" id="gateSurveyNote" maxlength="160" />
+          <label class="row" style="display:block"><div>Venmo handle (no @)</div></label>
+          <input type="text" id="venmo" maxlength="40" placeholder="Queerasolutions" />
+          <label class="row" style="display:block"><div>Venmo note</div></label>
+          <input type="text" id="gateDonateNote" maxlength="160" />
+          <div class="flex" style="margin-top:10px"><button class="hot" id="saveGate">save cover page</button><a href="/" target="_blank" style="color:var(--hot)">preview ↗</a></div>
+        </div>
+        <div>
+          <p class="muted" style="margin-top:0"><b style="color:var(--text)">survey code</b> — one shared code. paste it on the survey's thank-you page.</p>
+          <div class="flex"><input type="text" id="sharedCode" maxlength="24" placeholder="e.g. MUTUALAID" style="flex:1" /><button class="hot" id="makeShared">make shared code</button></div>
+          <p class="muted"><b style="color:var(--text)">donor codes</b> — one-time codes. send one after each Venmo.</p>
+          <div class="flex"><input type="number" id="singleCount" min="1" max="50" value="5" style="width:80px" /><input type="text" id="singleLabel" maxlength="80" placeholder="note (e.g. venmo — Oct)" style="flex:1" /><button class="hot" id="makeSingle">make codes</button></div>
+          <div id="newCodes" class="mono" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <table style="margin-top:14px"><thead><tr><th>code</th><th>kind</th><th>note</th><th>used</th><th>status</th><th></th></tr></thead><tbody id="codeRows"></tbody></table>
+    </section>
+
     <section class="card">
       <h2>last 14 days</h2>
       <div class="stats" id="stats"></div>
@@ -176,7 +203,7 @@
       sessionStorage.setItem("t4t.admin", TOKEN);
       $("gate").hidden = true; $("app").hidden = false;
       cfg = d.config; paint(); paintStats(d.stats, d.features);
-      loadFeedback(true); loadTapes(true); loadUsers(true);
+      loadFeedback(true); loadTapes(true); loadUsers(true); loadCodes();
       fetch("/api/health").then((r) => r.json()).then((h) => { $("ver").textContent = "v" + h.version; });
     } catch (e) { $("gateMsg").textContent = e.message; }
   }
@@ -184,11 +211,12 @@
     document.querySelectorAll("[data-k]").forEach((i) => { i.checked = !!cfg[i.dataset.k]; });
     document.querySelectorAll("[data-lane]").forEach((i) => { i.checked = !!cfg.lanes[i.dataset.lane]; });
     $("defaultLane").value = cfg.defaultLane; $("maxMemo").value = cfg.maxMemoSeconds;
-    $("banner").value = cfg.banner || ""; $("donationUrl").value = cfg.donationUrl || ""; $("donationLabel").value = cfg.donationLabel || "";
+    $("banner").value = cfg.banner || "";
+    $("surveyUrl").value = cfg.surveyUrl || ""; $("venmo").value = cfg.venmo || ""; $("gateSurveyNote").value = cfg.gateSurveyNote || ""; $("gateDonateNote").value = cfg.gateDonateNote || ""; $("donationUrl").value = cfg.donationUrl || ""; $("donationLabel").value = cfg.donationLabel || "";
     $("raw").textContent = JSON.stringify(cfg, null, 2);
   }
   function paintStats(rows, f) {
-    const keys = [["tapes", "tapes sent"], ["replies", "write-backs"], ["feedback", "feedback"], ["signups", "new sign-ups"], ["logins", "sign-ins"]];
+    const keys = [["unlocks", "codes used"], ["tapes", "tapes sent"], ["replies", "write-backs"], ["feedback", "feedback"], ["signups", "new sign-ups"], ["logins", "sign-ins"]];
     $("stats").innerHTML = keys.map(([k, label]) => {
       const total = rows.reduce((a, r) => a + r[k], 0), max = Math.max(1, ...rows.map((r) => r[k]));
       const bars = rows.slice().reverse().map((r) => `<i title="${r.day}: ${r[k]}" style="height:${(r[k] / max) * 100}%"></i>`).join("");
@@ -232,6 +260,37 @@
     } catch (e) { toast("😿 " + e.message); }
   }
 
+
+  async function loadCodes() {
+    try {
+      const d = await api("codes");
+      $("codeRows").innerHTML = d.items.map((c) => `<tr data-key="${esc(c.key)}">
+        <td class="mono"><b style="color:var(--text);font-size:13px">${esc(c.code)}</b></td>
+        <td>${c.kind === "shared" ? '<span class="pill">survey · shared</span>' : '<span class="pill">one-time</span>'}</td>
+        <td>${esc(c.label || "")}</td>
+        <td>${c.uses || 0}${c.max ? " / " + c.max : ""}</td>
+        <td>${c.off ? '<span class="pill off">off</span>' : c.max && c.uses >= c.max ? '<span class="pill">used up</span>' : '<span class="pill on">active</span>'}</td>
+        <td class="flex"><button data-copy="${esc(c.code)}">copy</button><button data-toggle="${c.off ? "on" : "off"}">${c.off ? "turn on" : "turn off"}</button><button class="bad" data-delcode>delete</button></td></tr>`).join("")
+        || '<tr><td colspan="6" class="muted">no codes yet — make a survey code first</td></tr>';
+    } catch (e) { toast("😿 " + e.message); }
+  }
+  $("saveGate").onclick = () => {
+    const u = $("surveyUrl").value.trim();
+    if (u && !/^https:\/\//.test(u)) return toast("the survey link must start with https://");
+    save({ surveyUrl: u, venmo: $("venmo").value, gateSurveyNote: $("gateSurveyNote").value, gateDonateNote: $("gateDonateNote").value });
+  };
+  $("makeShared").onclick = () => api("codes", { method: "POST", body: JSON.stringify({ kind: "shared", code: $("sharedCode").value.trim(), label: "survey thank-you page" }) })
+    .then((d) => { $("newCodes").innerHTML = "new survey code: <b>" + esc(d.made[0].code) + "</b>"; $("sharedCode").value = ""; loadCodes(); }).catch((e) => toast("😿 " + e.message));
+  $("makeSingle").onclick = () => api("codes", { method: "POST", body: JSON.stringify({ kind: "single", count: Number($("singleCount").value) || 1, label: $("singleLabel").value }) })
+    .then((d) => { const list = d.made.map((c) => c.code).join("\n"); $("newCodes").innerHTML = "<pre>" + esc(list) + "</pre><button id=\"copyNew\">copy all</button>"; $("copyNew").onclick = () => navigator.clipboard.writeText(list).then(() => toast("copied ✓")); loadCodes(); })
+    .catch((e) => toast("😿 " + e.message));
+  $("codeRows").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-key]"); if (!tr) return;
+    const key = tr.dataset.key;
+    const cp = e.target.closest("[data-copy]"); if (cp) return navigator.clipboard.writeText(cp.dataset.copy).then(() => toast("copied ✓"));
+    const tg = e.target.closest("[data-toggle]"); if (tg) return api(`codes/${key}`, { method: "PATCH", body: JSON.stringify({ off: tg.dataset.toggle === "off" }) }).then(loadCodes).catch((er) => toast(er.message));
+    if (e.target.closest("[data-delcode]") && confirm("delete this code? people who already used it stay in.")) api(`codes/${key}`, { method: "DELETE" }).then(loadCodes).catch((er) => toast(er.message));
+  });
   $("enter").onclick = enter; $("tok").onkeydown = (e) => { if (e.key === "Enter") enter(); };
   $("lock").onclick = lock; $("refresh").onclick = enter;
   document.querySelectorAll("[data-k]").forEach((i) => i.addEventListener("change", () => {

@@ -128,7 +128,7 @@ export async function authVerify(req, env) {
 }
 
 export function publicUser(u) {
-  return { id: u.id, name: u.name || "", phone: maskPhone(u.phone), notify: u.notify !== false, createdAt: u.createdAt };
+  return { id: u.id, name: u.name || "", phone: maskPhone(u.phone), notify: u.notify !== false, createdAt: u.createdAt, access: !!u.access };
 }
 
 // Resolve the session from "authorization: Bearer <token>" (or null).

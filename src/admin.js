@@ -4,6 +4,7 @@
 import { j, err, str, sha256, safeEqual, readJson, rateLimited, getConfig, saveConfig, DEFAULT_CONFIG, tsFromRev, smsReady } from "./lib.js";
 import { matchKey } from "./playlists.js";
 import { maskPhone } from "./auth.js";
+import { adminCodes } from "./access.js";
 
 async function isAdmin(req, env) {
   if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 16) return false;
@@ -18,7 +19,7 @@ async function listPrefix(env, prefix, cursor, limit = 50) {
 
 async function stats(env, days = 14) {
   const out = [];
-  const keys = ["tapes", "replies", "feedback", "signups", "logins", "plays"];
+  const keys = ["tapes", "replies", "feedback", "signups", "logins", "plays", "unlocks"];
   for (let d = 0; d < days; d++) {
     const day = new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
     const row = { day };
@@ -56,6 +57,10 @@ export async function handleAdmin(req, env, path) {
   const M = req.method;
   const url = new URL(req.url);
   let m;
+  if (path === "codes" || path.startsWith("codes/")) {
+    const r = await adminCodes(req, env, path);
+    if (r) return r;
+  }
 
   if (path === "overview" && M === "GET") {
     const cfg = await getConfig(env, true);

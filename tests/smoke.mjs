@@ -11,7 +11,8 @@ const tape = { tapeTitle: "smoke test", recipientName: "Tester", senderName: "Bo
   senderEmail: "private@example.com", tracks: [{ title: "Song", artist: "Artist" }] };
 const fd = new FormData();
 fd.set("tape", JSON.stringify(tape));
-const made = await fetch(`${BASE}/api/tape`, { method: "POST", body: fd });
+// with the access gate on, the smoke test uses the local-only test header (ignored in production)
+const made = await fetch(`${BASE}/api/tape`, { method: "POST", body: fd, headers: { "x-t4t-stress": process.env.ADMIN_TOKEN || "local-admin-token-1234567890" } });
 ok(made.status === 200 || made.status === 201, "POST /api/tape creates a tape");
 const { id, ownerToken } = await made.json();
 ok(/^[a-z2-9]{6,16}$/.test(id || ""), "tape id looks right");

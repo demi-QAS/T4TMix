@@ -34,7 +34,7 @@ async function sendTape(n, memoEvery = 1, opts = {}) {
 
 console.log(`\n— T4T Mix stress test against ${BASE}\n`);
 const h = await (await fetch(`${BASE}/api/health`)).json();
-ok(h.version === "0.8.0", `health reports v${h.version}`);
+ok(h.version === "0.9.0", `health reports v${h.version}`);
 
 // 1. voice memos on every song of a big tape
 let t = performance.now();
@@ -81,7 +81,9 @@ const okBurst = burst.filter((b) => b.status === 201 && b.body.memos === 6).leng
 ok(okBurst === 50, `50 simultaneous sends (300 voice memos): ${okBurst}/50 saved with every memo (${ms(t)})`);
 { // and the rate limiter still protects you from one person spamming
   const spam = await Promise.all(Array.from({ length: 30 }, () => { const fd = new FormData(); fd.set("tape", JSON.stringify(tapeJson(1))); return _fetch(`${BASE}/api/tape`, { method: "POST", body: fd }).then((r) => r.status); }));
-  ok(spam.filter((x) => x === 429).length >= 10, `one IP firing 30 sends: ${spam.filter((x) => x === 429).length} blocked by the rate limiter`);
+  // with the access gate on, spam without a code is stopped (402) before the rate limiter (429) — both count as blocked
+  const blocked = spam.filter((x) => x === 429 || x === 402).length;
+  ok(blocked >= 10, `one IP firing 30 sends: ${blocked} blocked (gate or rate limiter)`);
 }
 ok(new Set(burst.filter((b) => b.body.id).map((b) => b.body.id)).size === burst.filter((b) => b.body.id).length, "every tape got a unique id");
 
@@ -137,7 +139,7 @@ ok(hp.ok, "spam bot (honeypot) gets a fake OK");
 ok((await fetch(`${BASE}/api/admin/overview`)).status === 401, "admin needs the token");
 const A = { "x-admin-token": ADMIN, "content-type": "application/json" };
 const ov = await (await fetch(`${BASE}/api/admin/overview`, { headers: A })).json();
-ok(ov.ok && ov.stats[0].tapes >= 60 && ov.stats[0].replies >= 1, `admin overview: ${ov.stats[0].tapes} tapes, ${ov.stats[0].replies} replies, ${ov.stats[0].feedback} feedback today`);
+ok(ov.ok && ov.stats[0].tapes >= 50 && ov.stats[0].replies >= 1, `admin overview: ${ov.stats[0].tapes} tapes, ${ov.stats[0].replies} replies, ${ov.stats[0].feedback} feedback today`);
 const fbl = await (await fetch(`${BASE}/api/admin/feedback`, { headers: A })).json();
 ok(fbl.items.some((f) => f.message === "love the heart player") && !fbl.items.some((f) => f.message === "buy pills"), "admin sees real feedback, not the spam");
 await fetch(`${BASE}/api/admin/config`, { method: "PUT", headers: A, body: JSON.stringify({ maintenance: true, banner: "quick tune-up 🔧", donationUrl: "https://ko-fi.com/t4tmix", lanes: { spotify: false } }) });

@@ -19,3 +19,11 @@
 - **Fixes:** the Side B "can't tap songs" bug; voice memos and photos survive a reload; Safari recording format.
 - **Size:** `style.css` went from 1.2 MB to 36 KB (fonts moved to `public/fonts/`); duplicate root art files removed; hardcoded analytics beacon removed.
 - **Docs:** README, DEPLOY, PEOPLES990, REVIEW; old notes moved to `docs/history/`.
+
+## 0.9.0 — access-code gate
+- New cover page: type an access code on a cassette label → "press play" to unlock (reels spin, the cover slides up; wrong codes shake)
+- Two ways in on the cover: the mutual aid survey link and Venmo @Queerasolutions (supports The People's 990)
+- `/admin` → access codes: one shared survey code + batches of one-time donor codes; copy, turn off, delete, usage counts
+- `?code=XXXX` links pre-fill the code; unlocks saved per device (1 year) and on signed-in accounts
+- Sending a tape now requires access when the gate is on; gift + reply links stay open
+- Tests: `npm run test:gate` (20 checks)

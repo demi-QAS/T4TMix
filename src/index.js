@@ -10,6 +10,7 @@
 //   POST /api/tape/:id/reply         → recipient's ONE reply → { replyUrl }
 //   GET  /api/reply/:token           → the reply, for whoever holds the private reply link
 //   GET  /api/reply/:token/audio     → reply voice memo
+//   GET/POST /api/access             → access-code gate (check / redeem a code → pass)
 //   POST /api/feedback               → feedback form
 //   POST /api/auth/start | /api/auth/verify | /api/auth/logout   phone sign-in
 //   GET/PATCH /api/me, POST /api/me/claim
@@ -24,8 +25,9 @@ import {
 import { handlePlaylist, handleMatch } from "./playlists.js";
 import { authStart, authVerify, authLogout, getMe, patchMe, claimTapes, getUser, bump, textReply, ttlLeft } from "./auth.js";
 import { handleAdmin } from "./admin.js";
+import { hasAccess, gateError, redeem, accessStatus } from "./access.js";
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 
 // ---------- tapes ----------
 const MEDIA_FILE = /^(memo-\d{1,3}\.(webm|ogg|mp4|m4a)|(cover|shell|window)\.(jpg|png|webp|gif)|reply\.(webm|ogg|mp4|m4a))$/;
@@ -74,6 +76,7 @@ async function putFile(env, id, name, file, maxBytes) {
 async function saveTape(req, env) {
   const cfg = await getConfig(env);
   if (cfg.maintenance || !cfg.newTapes) return err(cfg.banner || "sending is paused for a moment — try again soon", 503);
+  if (!(await hasAccess(req, env, cfg))) return gateError();
   if (await rateLimited(req, env, "save", 20, 3600)) return err("that's a lot of tapes — try again in a bit", 429);
   const ct = req.headers.get("content-type") || "";
   if (!ct.startsWith("multipart/form-data")) return err("expected multipart/form-data", 415);
@@ -354,6 +357,7 @@ async function route(req, env, ctx) {
       phoneLogin: smsReady(env),
       replyEmail: !!env.SEND_EMAIL,
       admin: !!env.ADMIN_TOKEN,
+      accessGate: true,
     } });
   }
   if (p === "/api/config" && M === "GET") return j({ ok: true, ...publicConfig(await getConfig(env), env) }, 200, { "cache-control": "public, max-age=30" });
@@ -374,6 +378,8 @@ async function route(req, env, ctx) {
     return streamMedia(req, env, `${t.id}/${t.reply.audio}`, true);
   }
   if ((m = p.match(/^\/api\/media\/([a-z2-9]{6,16})\/([a-z0-9.-]{3,24})$/)) && M === "GET") return getMedia(req, env, m[1], m[2]);
+  if (p === "/api/access" && M === "POST") return redeem(req, env);
+  if (p === "/api/access" && M === "GET") return accessStatus(req, env);
   if (p === "/api/feedback" && M === "POST") return postFeedback(req, env);
   if (p === "/api/auth/start" && M === "POST") return authStart(req, env);
   if (p === "/api/auth/verify" && M === "POST") return authVerify(req, env);

@@ -99,6 +99,12 @@ export const DEFAULT_CONFIG = {
   lanes: { youtube: true, soundcloud: true, spotify: true, preview: true },
   defaultLane: "youtube",
   maxMemoSeconds: 20,
+  // ---- access-code gate (free beta) ----
+  gate: true,                  // true = senders need an access code; gift + reply links always open
+  surveyUrl: "https://bit.ly/nonprofit-tax-survey",
+  venmo: "Queerasolutions",    // Venmo handle, no @
+  gateSurveyNote: "finish it and your code is on the thank-you page.",
+  gateDonateNote: "any amount. put your phone or email in the note and we'll send your code.",
 };
 let cfgCache = null, cfgAt = 0;
 export async function getConfig(env, fresh = false) {
@@ -112,7 +118,7 @@ export async function getConfig(env, fresh = false) {
 export function mergeConfig(base, patch) {
   const out = { ...base, lanes: { ...base.lanes } };
   if (!patch || typeof patch !== "object") return out;
-  for (const k of ["maintenance", "newTapes", "replies", "login", "feedback", "sampleFallback"])
+  for (const k of ["maintenance", "newTapes", "replies", "login", "feedback", "sampleFallback", "gate"])
     if (typeof patch[k] === "boolean") out[k] = patch[k];
   if (typeof patch.banner === "string") out.banner = str(patch.banner, 280);
   if (typeof patch.donationLabel === "string") out.donationLabel = str(patch.donationLabel, 60) || base.donationLabel;
@@ -120,6 +126,13 @@ export function mergeConfig(base, patch) {
     const u = str(patch.donationUrl, 300);
     out.donationUrl = /^https:\/\/[^\s"'<>]+$/.test(u) ? u : "";
   }
+  if (typeof patch.surveyUrl === "string") {
+    const u = str(patch.surveyUrl, 300);
+    out.surveyUrl = /^https:\/\/[^\s"'<>]+$/.test(u) ? u : "";
+  }
+  if (typeof patch.venmo === "string") out.venmo = str(patch.venmo, 40).replace(/^@/, "").replace(/[^A-Za-z0-9_-]/g, "");
+  if (typeof patch.gateSurveyNote === "string") out.gateSurveyNote = str(patch.gateSurveyNote, 160);
+  if (typeof patch.gateDonateNote === "string") out.gateDonateNote = str(patch.gateDonateNote, 160);
   if (patch.lanes && typeof patch.lanes === "object")
     for (const l of LANES) if (typeof patch.lanes[l] === "boolean") out.lanes[l] = patch.lanes[l];
   if (LANES.includes(patch.defaultLane)) out.defaultLane = patch.defaultLane;
@@ -145,5 +158,7 @@ export function publicConfig(cfg, env) {
     sampleFallback: cfg.sampleFallback, lanes: cfg.lanes, defaultLane: cfg.defaultLane,
     maxMemoSeconds: cfg.maxMemoSeconds,
     soundcloudSearch: !!(env.SOUNDCLOUD_CLIENT_ID && env.SOUNDCLOUD_CLIENT_SECRET),
+    gate: cfg.gate, surveyUrl: cfg.surveyUrl, venmo: cfg.venmo,
+    gateSurveyNote: cfg.gateSurveyNote, gateDonateNote: cfg.gateDonateNote,
   };
 }

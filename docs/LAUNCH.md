@@ -27,3 +27,18 @@ Maintenance mode and banner, feature switches, music-lane toggles, donation link
 - The Cache API is only guaranteed on a custom domain, so rate limiting uses `ratelimits` bindings instead.
 - Not yet tested on real devices: iOS autoplay and webm voice memos on older iPhones.
 - Voice memos live only in the browser until the tape is sent (lost if you reload).
+
+## Access-code gate (v0.9): survey or Venmo gets you in
+The site opens on a cover page. To make tapes, people type an access code. **Gift links (`/t/…`) and reply links (`/r/…`) never need a code**, so anyone you send a tape to can open it and write back.
+
+**Setup (5 minutes, in `/admin` → "access codes"):**
+1. **Survey code.** Make one shared code (e.g. `MUTUALAID`). Paste it on your survey's **thank-you / confirmation page**: "Thanks! Your T4T Mix code is MUTUALAID. Go to t4tmix…/?code=MUTUALAID". The `?code=` link fills the code in for them. A shared code has unlimited uses unless you turn it off.
+2. **Donor codes.** Make a batch of one-time codes (e.g. 10, note "venmo — Nov"). When a Venmo comes in, text or email one code to the donor. Each code works once.
+3. **Edit the cover page text** (survey link, Venmo handle, notes) in the same panel. "Preview ↗" opens the live cover.
+
+**Good to know**
+- If the survey code leaks, turn it off and make a new one. **People already in stay in.** Only new unlocks need the new code.
+- Unlocking is saved on the device for a year. Signed-in people also get it saved to their account, so it works on any phone.
+- Turning "require an access code" off opens the site to everyone instantly.
+- Honest limits: anyone holding the survey code can get in without taking the survey (it's an honor-system gate, not proof). One-time codes are the strict option.
+- "Codes used" appears in the 14-day stats.
