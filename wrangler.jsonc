@@ -10,6 +10,11 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Don't wipe variables you add in the Cloudflare dashboard when you deploy.
+  // Put Twilio / admin values in as SECRETS (dashboard type "Secret" or
+  // `npx wrangler secret put NAME`), never in this file: the repo is public.
+  "keep_vars": true,
+
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

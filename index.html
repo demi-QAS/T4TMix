@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, ">
+<title>T4T Mix — mixtapes, minus the necklace</title>
+<meta name="description" content="paste a playlist, write on the tape, send the whole feeling. a Queer Accounting Solutions creation.">
+<meta property="og:title" content="T4T Mix — mixtapes, minus the necklace">
+<meta property="og:description" content="paste a playlist, write on the tape, send the whole feeling.">
+<meta property="og:image" content="/assets/full_recorder_boombox.png">
+<meta name="theme-color" content="#e63a7a">
+<link rel="icon" href="/assets/full_recorder_boombox.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg-blobs" aria-hidden="true"></div>
+<div class="site-banner" id="site-banner" hidden></div>
+
+<!-- ============ ACCESS GATE (free beta cover page) ============ -->
+<div class="gate" id="gate" hidden aria-modal="true" role="dialog" aria-labelledby="gate-title">
+  <div class="gate-stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="gate-inner">
+    <div class="gate-top">
+      <span class="gate-kicker">a Queer Accounting Solutions creation</span>
+      <span class="gate-stamp">free beta</span>
+    </div>
+
+    <h1 class="gate-title" id="gate-title"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></h1>
+    <p class="gate-lede">make someone a mixtape: your songs, your voice between them, one link to send.</p>
+
+    <form class="gate-tape" id="gate-form" autocomplete="off" novalidate>
+      <span class="gt-screw tl"></span><span class="gt-screw tr"></span><span class="gt-screw bl"></span><span class="gt-screw br"></span>
+      <div class="gt-label">
+        <div class="gt-label-top"><span>ACCESS CODE</span><span class="gt-side">SIDE A</span></div>
+        <label class="sr-only" for="gate-code">access code</label>
+        <input id="gate-code" class="gt-input" type="text" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="write your code here" />
+        <div class="gt-lines" aria-hidden="true"><i></i><i></i></div>
+      </div>
+      <div class="gt-window" aria-hidden="true">
+        <span class="gt-reel"><b></b></span>
+        <span class="gt-ribbon"></span>
+        <span class="gt-reel"><b></b></span>
+      </div>
+      <button class="gt-play" id="gate-go" type="submit">▶ press play</button>
+    </form>
+    <p class="gate-msg" id="gate-msg" role="status" aria-live="polite"></p>
+
+    <div class="gate-or"><span>no code yet? two ways in</span></div>
+
+    <div class="gate-ways">
+      <a class="gate-way way-survey" id="gate-survey" href="#" target="_blank" rel="noopener">
+        <span class="way-num">1</span>
+        <span class="way-body">
+          <b>fill out the mutual aid survey</b>
+          <small id="gate-survey-note"></small>
+          <span class="way-link" id="gate-survey-link"></span>
+        </span>
+        <span class="way-go" aria-hidden="true">→</span>
+      </a>
+      <div class="gate-way way-venmo" id="gate-venmo-card">
+        <span class="way-num">2</span>
+        <span class="way-body">
+          <b>chip in on Venmo</b>
+          <small id="gate-donate-note"></small>
+          <span class="way-link"><span id="gate-venmo-handle"></span> · helps launch The People's 990</span>
+          <span class="way-actions">
+            <a class="way-btn" id="gate-venmo" href="#" target="_blank" rel="noopener">open Venmo</a>
+            <button class="way-btn ghost" id="gate-venmo-copy" type="button">copy handle</button>
+          </span>
+        </span>
+      </div>
+    </div>
+
+    <p class="gate-fine">
+      got a tape from someone? those links open without a code. 💌
+      <button class="gate-linkbtn" id="gate-signin" type="button" hidden>already unlocked? sign in</button>
+    </p>
+  </div>
+  <div class="gate-stripe bottom" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+</div>
+
+
+<!-- ============ ACCOUNT BAR ============ -->
+<div class="account-bar" id="account-bar">
+  <button class="acct-btn" id="btn-inbox" hidden>📬 my tapes <span class="badge" id="inbox-badge" hidden>0</span></button>
+  <button class="acct-btn" id="btn-signin" hidden>📱 sign in</button>
+</div>
+
+<!-- ============ SCREEN 1: HERO ============ -->
+<section id="screen-hero" class="screen active">
+  <div class="topbadge">🌈 a Queer Accounting Solutions creation</div>
+  <div class="hero-wrap">
+    <div class="wordmark">
+      <span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span>
+    </div>
+    <p class="tagline">mixtapes, minus the necklace.</p>
+    <p class="subtagline">no gatekeeping, just good taste. paste a playlist, write on the tape, send the whole feeling.</p>
+
+    <div class="link-card">
+      <label class="link-label">▶️ YouTube / YouTube Music playlist <span class="soon-badge">full songs</span></label>
+      <input id="ytm-input" type="url" inputmode="url" placeholder="https://youtube.com/playlist?list=…" />
+      <label class="link-label">☁️ SoundCloud playlist (set)</label>
+      <input id="sc-input" type="url" inputmode="url" placeholder="https://soundcloud.com/artist/sets/…" />
+      <label class="link-label">🎧 Spotify playlist</label>
+      <input id="spotify-input" type="url" inputmode="url" placeholder="https://open.spotify.com/playlist/…" />
+      <button id="btn-load" class="btn-primary">Load my playlist →</button>
+      <div id="load-status" class="load-status" role="status"></div>
+    </div>
+
+    <p class="honesty-note">
+      💌 every tape plays on <strong>YouTube</strong> first — full songs, no login (sometimes a short ad).
+      The person you send it to can switch to SoundCloud or Spotify if they like. Your voice memos play either way.
+    </p>
+
+    <div class="launch-card" id="launch-card">
+      <p class="launch-title">🧪 T4T Mix is brand new</p>
+      <p class="launch-sub">it's free. if it made you smile, tell me what to fix — or chip in to keep the tapes rolling.</p>
+      <div class="launch-actions">
+        <button class="btn-secondary" data-open-feedback>💬 give feedback</button>
+        <a class="btn-donate" id="hero-donate" href="#" target="_blank" rel="noopener" hidden>☕ chip in</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STEP INDICATOR ============ -->
+<div class="step-indicator" id="step-indicator" style="display:none;">
+  <div class="step-dot active" data-step="tape">1<span>the tape</span></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="player">2<span>the player</span></div>
+  <div class="step-line"></div>
+  <div class="step-dot" data-step="send">3<span>send</span></div>
+</div>
+
+<!-- ============ SCREEN 2: THE TAPE ============ -->
+<section id="screen-tape" class="screen">
+  <div class="builder-header">
+    <div class="wordmark small"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></div>
+    <div class="playlist-title" id="playlist-title-display">Loading playlist…</div>
+  </div>
+
+  <!-- the cassette (front only — the songs live on the J-card below) -->
+  <div class="cassette-stage">
+    <div class="cassette-body" id="cassette-front">
+      <div class="cassette-screw tl"></div><div class="cassette-screw tr"></div>
+      <div class="cassette-screw bl"></div><div class="cassette-screw br"></div>
+      <div class="cassette-engraving" id="cassette-engraving" contenteditable="true" spellcheck="false">✎ engrave a message</div>
+      <div class="cassette-label" id="cassette-label">
+        <div class="label-lines" aria-hidden="true"></div>
+        <div class="label-side-tag">SIDE A</div>
+        <div class="handwritten-title" id="handwritten-title" contenteditable="true" spellcheck="false">a mix for you</div>
+        <button class="cassette-photo-slot" id="cassette-photo-slot" title="add a photo"><span class="cassette-photo-placeholder">📷</span></button>
+      </div>
+      <div class="cassette-window">
+        <div class="reel" id="reel-left"><div class="reel-spokes"></div></div>
+        <div class="tape-ribbon"></div>
+        <div class="reel" id="reel-right"><div class="reel-spokes"></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="hint-line">tap the label to name it · tap 📷 to add a photo</p>
+  <input type="file" id="cover-photo-input" accept="image/*" hidden>
+
+  <!-- make it yours -->
+  <div class="panel style-panel">
+    <div class="style-row"><span class="style-label">tape</span>
+      <div class="skin-picker" id="skin-picker">
+        <button class="skin-swatch active" data-skin="trans" title="Trans"></button>
+        <button class="skin-swatch" data-skin="lesbian" title="Lesbian"></button>
+        <button class="skin-swatch" data-skin="bi" title="Bi"></button>
+        <button class="skin-swatch" data-skin="nb" title="Nonbinary"></button>
+        <button class="skin-swatch" data-skin="pride" title="Pride"></button>
+      </div></div>
+    <div class="style-row"><span class="style-label">pen</span>
+      <div class="ink-picker" id="ink-picker">
+        <button class="ink-dot active" data-ink="midnight" title="midnight"></button>
+        <button class="ink-dot" data-ink="berry" title="berry"></button>
+        <button class="ink-dot" data-ink="ocean" title="ocean"></button>
+        <button class="ink-dot" data-ink="forest" title="forest"></button>
+        <button class="ink-dot" data-ink="plum" title="plum"></button>
+      </div></div>
+    <div class="style-row"><span class="style-label">paper</span>
+      <div class="paper-picker" id="paper-picker">
+        <button class="paper-chip active" data-paper="cream">cream</button>
+        <button class="paper-chip" data-paper="kraft">kraft</button>
+        <button class="paper-chip" data-paper="grid">grid</button>
+        <button class="paper-chip" data-paper="blush">blush</button>
+      </div></div>
+  </div>
+
+  <!-- the J-card: every song, full width -->
+  <section class="jcard" aria-label="your songs">
+    <div class="jcard-head">
+      <span>the songs</span>
+      <button class="jcard-play" id="btn-preview-play" title="listen">▶ listen</button>
+    </div>
+    <p class="jcard-hint">tap a song to rename it, add a note, or record a voice memo</p>
+    <ol id="back-tracklist" class="jcard-list"></ol>
+  </section>
+
+  <div class="letter-flap-wrap">
+    <button class="letter-flap-tab" id="btn-open-letter">💌 tell them how you really feel →</button>
+  </div>
+
+  <button id="btn-to-player" class="btn-primary btn-wide">next: pick the player →</button>
+</section>
+
+<!-- ============ LETTER MODAL (overall message) ============ -->
+<div id="letter-modal" class="modal-overlay">
+  <div class="modal-card letter-card">
+    <button class="modal-close" id="letter-close">✕</button>
+    <div class="letter-notebook">
+      <div class="letter-lines" aria-hidden="true"></div>
+      <div class="letter-heading">to you, with love —</div>
+      <textarea id="letter-textarea" class="letter-textarea" placeholder="tell them how you really feel... this is the part they'll read twice."></textarea>
+    </div>
+    <button id="btn-save-letter" class="btn-primary btn-wide">tuck it into the tape</button>
+  </div>
+</div>
+
+<!-- ============ TRACK VOICE-MEMO MODAL (per-track, quick) ============ -->
+<div id="voice-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" id="voice-modal-close">✕</button>
+    <div class="modal-track-name" id="voice-track-name">Track name</div>
+    <div class="modal-track-artist" id="voice-track-artist">Artist</div>
+
+    <label class="modal-label">rename it just for them (original stays in the credits)</label>
+    <input id="track-rename-input" type="text" placeholder="e.g. our summer 2020 song" />
+
+    <label class="modal-label">what does this song make you think of?</label>
+    <textarea id="track-note-text" rows="2" placeholder="this is the song from that road trip..."></textarea>
+
+    <label class="modal-label">voice memo — your voice on this song (max <span id="memo-max">20</span>s)</label>
+    <div class="voice-recorder">
+      <button id="btn-record" class="btn-record">🎙️ record</button>
+      <span id="record-timer">0:00</span>
+      <label class="memo-position">
+        <select id="memo-position">
+          <option value="intro">plays BEFORE the song</option>
+          <option value="outro">plays AFTER the song</option>
+          <option value="over-ad">talks OVER the start of the song</option>
+        </select>
+      </label>
+    </div>
+    <audio id="voice-playback" controls style="display:none; width:100%; margin-top:8px;"></audio>
+    <button id="btn-delete-memo" class="btn-ghost small" style="display:none;">🗑 remove this memo</button>
+    <button id="btn-save-voice" class="btn-primary btn-wide">save to this track</button>
+  </div>
+</div>
+
+<!-- TAPE CLOSING TRANSITION OVERLAY -->
+<div id="closing-overlay" class="closing-overlay">
+  <div class="closing-tape" id="closing-tape-visual"></div>
+  <p class="closing-msg">tucking your tape away…</p>
+</div>
+
+<!-- ============ SCREEN 3: PLAYER ============ -->
+<section id="screen-player" class="screen">
+  <div class="wordmark small center"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></div>
+  <h2 class="send-heading">pick the player</h2>
+  <p class="send-sub">this is exactly what they'll press play on.</p>
+
+  <div class="shell-picker" id="shell-picker">
+    <button class="shell-option active" data-shell="boombox"><img src="assets/full_recorder_boombox.svg" alt=""><span>boombox</span></button>
+    <button class="shell-option" data-shell="carabiner"><img src="assets/full_recorder_carabiner.svg" alt=""><span>carabiner</span></button>
+    <button class="shell-option" data-shell="heart"><img src="assets/full_recorder_heart.svg" alt=""><span>heart</span></button>
+  </div>
+
+  <div class="player-stage">
+    <div class="player-scene"><div class="player-shell shell-boombox" id="player-shell"></div></div>
+
+    <div class="np-mini" id="np-mini">
+      <div class="np-track" id="np-track">—</div>
+      <div class="np-artist" id="np-artist"></div>
+    </div>
+    <div class="tape-controls">
+      <button class="tctrl" id="btn-rewind" title="previous">⏮</button>
+      <button class="tctrl big" id="btn-play" title="play">▶</button>
+      <button class="tctrl" id="btn-ff" title="next">⏭</button>
+    </div>
+    <p class="deck-msg" id="deck-msg"></p>
+    <div class="sender-deck">
+      <div class="lane-switch" id="lane-switch"></div>
+      <div class="deck-mount" id="deck-mount"></div>
+    </div>
+  </div>
+
+  <div class="send-actions">
+    <button id="btn-to-send" class="btn-primary btn-wide">next: wrap it up →</button>
+    <button id="btn-back-to-cover" class="btn-ghost">← back to the tape</button>
+  </div>
+</section>
+
+<!-- ============ SCREEN 4: SEND ============ -->
+<section id="screen-send" class="screen">
+  <div class="wordmark small center"><span class="wm-t4t">T4T</span><span class="wm-mix">Mix</span></div>
+  <h2 class="send-heading">wrap it up 🎁</h2>
+  <p class="send-sub">your letter, voice memos and photo all travel with it.</p>
+
+  <div class="qr-card" id="qr-card">
+    <div id="qr-canvas-holder"></div>
+    <div class="qr-caption" id="qr-caption">a mix for you</div>
+  </div>
+
+  <div id="send-form" class="send-form">
+    <label class="send-field"><span>who's it for?</span>
+      <input id="recipient-name" type="text" maxlength="40" placeholder="their name (shows on the wrapping)"></label>
+    <label class="send-field"><span>from</span>
+      <input id="sender-name" type="text" maxlength="40" placeholder="your name"></label>
+    <label class="send-field"><span>the room they open it in</span>
+      <select id="scene-picker">
+        <option value="desk">bedroom desk, 2am</option>
+        <option value="nightstand">nightstand by the window</option>
+        <option value="car">car, rain on the glass</option>
+      </select></label>
+    <button id="btn-send-tape" class="btn-primary btn-wide">💌 make my QR</button>
+    <p class="send-status" id="send-status" role="status"></p>
+  </div>
+
+  <div id="send-done" class="send-done" style="display:none;">
+    <a id="send-link" class="send-link" href="#" target="_blank" rel="noopener"></a>
+    <div class="send-actions">
+      <button id="btn-share" class="btn-primary btn-wide">📤 Share it</button>
+      <button id="btn-copy" class="btn-secondary btn-wide">🔗 Copy link</button>
+    </div>
+    <p class="qr-honesty-note" id="qr-note">they scan it → unwrap your tape → hear the songs + your voice. they can write back once. tapes keep for ~6 months.</p>
+  </div>
+
+  <div class="signin-nudge" id="signin-nudge" hidden>
+    <p>📱 <strong>sign in with your phone</strong> so their reply finds you — we'll text you the moment they write back, and your tapes follow you to any device.</p>
+    <button class="btn-secondary" id="btn-nudge-signin">sign in</button>
+  </div>
+  <div id="sent-list" class="sent-list"></div>
+  <div class="launch-card small">
+    <p class="launch-sub">free while it's new 💛 how was making this tape?</p>
+    <div class="launch-actions">
+      <button class="btn-secondary" data-open-feedback>💬 feedback</button>
+      <a class="btn-donate" id="send-donate" href="#" target="_blank" rel="noopener" hidden>☕ chip in</a>
+    </div>
+  </div>
+
+  <button id="btn-back-to-player" class="btn-ghost">← back to player</button>
+</section>
+
+<!-- ============ SIGN IN ============ -->
+<div id="signin-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div id="signin-step-phone">
+      <div class="modal-track-name">sign in with your phone</div>
+      <p class="modal-sub">we text you a code. no passwords. your number is only used to sign you in and to tell you when someone writes back.</p>
+      <label class="modal-label">phone number</label>
+      <input id="signin-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(202) 555-0123" />
+      <label class="modal-label">your name <em>(optional)</em></label>
+      <input id="signin-name" type="text" maxlength="40" autocomplete="nickname" placeholder="what friends call you" />
+      <button id="btn-send-code" class="btn-primary btn-wide">text me a code</button>
+    </div>
+    <div id="signin-step-code" hidden>
+      <div class="modal-track-name">check your texts 💬</div>
+      <p class="modal-sub" id="signin-sent-to">we sent a code</p>
+      <input id="signin-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" class="code-input" />
+      <button id="btn-verify-code" class="btn-primary btn-wide">sign in</button>
+      <button id="btn-code-back" class="btn-ghost small">use a different number</button>
+    </div>
+    <p class="send-status" id="signin-status" role="status"></p>
+  </div>
+</div>
+
+<!-- ============ MY TAPES / INBOX ============ -->
+<div id="inbox-modal" class="modal-overlay">
+  <div class="modal-card inbox-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div class="modal-track-name">📬 my tapes</div>
+    <p class="modal-sub" id="inbox-who"></p>
+    <div id="inbox-list" class="inbox-list"></div>
+    <label class="toggle-row"><input type="checkbox" id="inbox-notify" checked> text me when someone writes back</label>
+    <button id="btn-signout" class="btn-ghost small">sign out</button>
+  </div>
+</div>
+
+<!-- ============ FEEDBACK ============ -->
+<div id="feedback-modal" class="modal-overlay">
+  <div class="modal-card">
+    <button class="modal-close" data-close-modal>✕</button>
+    <div id="fb-form">
+      <div class="modal-track-name">how's T4T Mix treating you?</div>
+      <div class="fb-rating" id="fb-rating">
+        <button data-rating="love">😍<span>love it</span></button>
+        <button data-rating="like">🙂<span>it's nice</span></button>
+        <button data-rating="meh">😐<span>meh</span></button>
+        <button data-rating="broken">🛠️<span>something broke</span></button>
+      </div>
+      <label class="modal-label">tell me anything — bugs, wishes, feelings</label>
+      <textarea id="fb-message" rows="4" maxlength="2000" placeholder="the voice memo thing made me cry. also the heart player…"></textarea>
+      <label class="modal-label">how can I reach you? <em>(optional)</em></label>
+      <input id="fb-contact" type="text" maxlength="120" placeholder="email, IG, phone…" />
+      <input id="fb-website" type="text" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true" />
+      <button id="btn-send-feedback" class="btn-primary btn-wide">send it 💌</button>
+      <a class="btn-donate wide" id="fb-donate" href="#" target="_blank" rel="noopener" hidden>☕ or chip in to keep it free</a>
+    </div>
+    <div id="fb-done" hidden class="fb-done"><p class="big">💛</p><p>thank you — I read every one.</p></div>
+    <p class="send-status" id="fb-status" role="status"></p>
+  </div>
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="player.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
